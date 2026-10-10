@@ -245,7 +245,7 @@ var (
 	listingTag = regexp.MustCompile(`(?i)\{\{\s*(see|do|eat|listing)\s*(\||\n)`)
 	// Pro and college teams: a game is seasonal and unverifiable, and their
 	// readership measures fandom, so they never become itinerary candidates.
-	teamRe = regexp.MustCompile(`(?i)\b(nfl|nba|nhl|mlb|mls|wnba|ncaa|lacrosse|rugby|football team|baseball team|hockey team|basketball team|soccer team|home games|regular season|plays? (its|their) home)\b`)
+	teamRe = regexp.MustCompile(`(?i)\b(nfl|nba|nhl|mlb|mls|wnba|ncaa|national (football|basketball|hockey|lacrosse) league|major league (baseball|soccer)|stanley cup|super bowl|world series|champions'? cup|division i|lacrosse|rugby|(football|baseball|hockey|basketball|soccer) teams?|home games|regular season|plays? (its|their) home|the teams? (are|is|has|have)|successful teams?)\b`)
 )
 
 // ParseWikivoyage extracts the given listing templates ({{see|...}} etc.)
