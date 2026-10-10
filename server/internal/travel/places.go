@@ -12,12 +12,14 @@ import (
 // Places finds things to do and stops along a route. Google Places (new API)
 // when GOOGLE_PLACES_KEY is set, otherwise curated mock results.
 type Places struct {
-	key  string
-	http *http.Client
+	key    string
+	http   *http.Client
+	osm    bool   // real-data-only mode: Google, then OpenStreetMap, never mock
+	ranker Ranker // optional AI that picks among real OSM candidates
 }
 
 func NewPlaces(key string) *Places {
-	return &Places{key: key, http: &http.Client{Timeout: 15 * time.Second}}
+	return &Places{key: key, http: &http.Client{Timeout: 25 * time.Second}}
 }
 
 // Nearby returns up to limit places of the given kind near a point.
@@ -27,6 +29,9 @@ func (p *Places) Nearby(ctx context.Context, at LatLng, kind string, limit int) 
 		if res := p.google(ctx, at, kind, limit); len(res) > 0 {
 			return res
 		}
+	}
+	if p.osm {
+		return p.openStreetMap(ctx, at, kind, limit) // may be empty; never fabricated
 	}
 	return mockPlaces(at, kind, limit)
 }

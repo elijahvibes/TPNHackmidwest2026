@@ -295,7 +295,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 			"route": routeSrc, "gas": drive.Source, "geocode": destPlace.Source,
 			"flights": "serpapi",
 			"hotels":  "serpapi",
-			"places":  sourceOf(len(activities) > 0 && activities[0].Source == "google", "google"),
+			"places":  placesSource(activities, food),
 		},
 		Weather:     weather,
 		Safety:      safety,
@@ -735,6 +735,20 @@ func first[T any](s []T) *T {
 		return nil
 	}
 	return &s[0]
+}
+
+// placesSource names the provider behind the place lists: "google" or "osm"
+// when real, "none" when nothing came back, "mock" for offline test data.
+func placesSource(lists ...[]travel.Place) string {
+	for _, l := range lists {
+		if len(l) > 0 {
+			if s := l[0].Source; s == "google" || s == "osm" {
+				return s
+			}
+			return "mock"
+		}
+	}
+	return "none"
 }
 
 func sourceOf(live bool, name string) string {

@@ -31,8 +31,8 @@ export function planDataWarnings(plan: Plan): string[] {
   if (plan.sources.safety === 'fbi-ucr' && !/built-in|national average/i.test(plan.safety?.source ?? '')) {
     warnings.add('Safety: static built-in data, not a live API.')
   }
-  if ([...(plan.activities ?? []), ...(plan.food ?? []), ...(plan.stops ?? [])].some(p => p.source === 'google')) {
-    warnings.add('Place costs: estimated from Google price levels, not admission or menu prices. A cost of zero can mean the price is unknown.')
+  if ([...(plan.activities ?? []), ...(plan.food ?? []), ...(plan.stops ?? [])].some(p => p.source === 'google' || p.source === 'osm')) {
+    warnings.add('Place costs: estimated from Google price levels or typical prices, not admission or menu prices. A cost of zero can mean the price is unknown.')
   }
   if (!plan.ai_generated) {
     warnings.add('Itinerary: rule-based, not written by AI.')
@@ -61,6 +61,10 @@ export function planRealData(plan: Plan): string[] {
     const count = (places ?? []).filter(place => place.source === 'google').length
     if (count > 0) {
       real.push(`${label}: ${count} of ${places.length} places from Google Places (names, locations and available ratings; costs are estimates).`)
+    }
+    const osm = (places ?? []).filter(place => place.source === 'osm').length
+    if (osm > 0) {
+      real.push(`${label}: ${osm} of ${places.length} places from OpenStreetMap (names and locations; costs are estimates).`)
     }
   }
   if (plan.drive.source === 'eia') real.push('Gas price: EIA weekly US regular gasoline price, not a local station quote.')

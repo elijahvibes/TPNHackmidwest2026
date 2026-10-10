@@ -1,7 +1,8 @@
 // Package ai talks to any OpenAI-compatible chat completions endpoint.
-// Point AI_BASE_URL at Akamai Inference Cloud (or Ollama on a Linode GPU box)
-// and it just works; with no AI_BASE_URL the planner uses its deterministic
-// fallback so the rest of the app stays demoable.
+// Point AI_BASE_URL at the Akamai workshop inference service
+// (https://ws.akamai-workshops.com/v1, model hackathon-chat) or Ollama on a
+// Linode GPU box and it just works; with no AI_BASE_URL the planner uses its
+// deterministic fallback so the rest of the app stays demoable.
 package ai
 
 import (
@@ -46,12 +47,18 @@ type chatRequest struct {
 	Model          string          `json:"model"`
 	Messages       []Message       `json:"messages"`
 	Temperature    float64         `json:"temperature"`
+	MaxTokens      int             `json:"max_tokens,omitempty"`
 	ResponseFormat *responseFormat `json:"response_format,omitempty"`
 }
 
+// maxTokens is the Akamai workshop endpoint's ceiling. Its default is 512,
+// which cuts a multi-day itinerary off mid-JSON, so every call asks for the max.
+const maxTokens = 4096
+
 type chatResponse struct {
 	Choices []struct {
-		Message Message `json:"message"`
+		Message      Message `json:"message"`
+		FinishReason string  `json:"finish_reason"`
 	} `json:"choices"`
 	Error *struct {
 		Message string `json:"message"`
@@ -94,7 +101,7 @@ func (c *Client) chat(ctx context.Context, msgs []Message, wantJSON bool) (strin
 	if !c.Enabled() {
 		return "", fmt.Errorf("ai: AI_BASE_URL not configured")
 	}
-	req := chatRequest{Model: c.model, Temperature: 0.4, Messages: msgs}
+	req := chatRequest{Model: c.model, Temperature: 0.4, MaxTokens: maxTokens, Messages: msgs}
 	if wantJSON {
 		req.ResponseFormat = &responseFormat{Type: "json_object"}
 	}
@@ -125,6 +132,9 @@ func (c *Client) chat(ctx context.Context, msgs []Message, wantJSON bool) (strin
 	}
 	if len(out.Choices) == 0 {
 		return "", fmt.Errorf("ai: empty response")
+	}
+	if out.Choices[0].FinishReason == "length" {
+		return "", fmt.Errorf("ai: reply truncated at %d tokens", maxTokens)
 	}
 	return stripFence(out.Choices[0].Message.Content), nil
 }

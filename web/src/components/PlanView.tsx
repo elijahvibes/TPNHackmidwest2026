@@ -33,7 +33,7 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
   const first = plan.days[0]?.date, last = plan.days[plan.days.length - 1]?.date
   const budget = meta?.budget_usd ?? undefined
   const budgetLeft = budget ? budget - rec.transport_usd - rec.activities_usd : undefined
-  const live = Object.entries(plan.sources).filter(([, v]) => !['mock', 'fallback', 'estimate'].includes(v)).length
+  const live = Object.entries(plan.sources).filter(([, v]) => !['mock', 'fallback', 'estimate', 'none'].includes(v)).length
   const [showSources, setShowSources] = useState(false)
 
   return (
@@ -87,7 +87,7 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
             {live}/{Object.keys(plan.sources).length} live data sources {showSources ? '▾' : '▸'}
           </button>
           {showSources && Object.entries(plan.sources).map(([k, v]) => (
-            <span key={k} className="tag">{k}: <span className={['mock', 'fallback', 'estimate'].includes(v) ? 'text-dim' : 'text-cyan'}>{v}</span></span>
+            <span key={k} className="tag">{k}: <span className={['mock', 'fallback', 'estimate', 'none'].includes(v) ? 'text-dim' : 'text-cyan'}>{v}</span></span>
           ))}
         </div>
         {(plan.sources.flights === 'serpapi' || plan.sources.hotels === 'serpapi') && (

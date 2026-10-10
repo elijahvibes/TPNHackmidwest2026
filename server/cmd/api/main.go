@@ -38,16 +38,17 @@ func main() {
 	}
 
 	fuel := travel.NewFuel(cfg.EIAKey)
+	aiClient := ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel)
 	deps := &handlers.Deps{
 		DB:   pool,
 		Auth: auth.New(cfg.JWTSecret),
 		Fuel: fuel,
 		Planner: &planner.Planner{
-			AI:      ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel),
+			AI:      aiClient,
 			Geo:     travel.NewGeo(cfg.MapboxToken),
 			Fuel:    fuel,
 			SerpAPI: travel.NewSerpAPI(cfg.SerpAPIKey),
-			Places:  travel.NewPlaces(cfg.PlacesKey),
+			Places:  travel.NewPlaces(cfg.PlacesKey).EnableOSM(aiClient),
 			Weather: travel.NewNWS(),
 		},
 		Payments: payments.NewJackHenry(cfg.JackHenryBaseURL, cfg.JackHenryKey),
