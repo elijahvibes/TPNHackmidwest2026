@@ -1,7 +1,9 @@
 .env
+.env.*
+!.env.example
 node_modules/
 web/dist/
 server/bin/
 *.log
 .DS_Store
-.pg/
+.mariadb/

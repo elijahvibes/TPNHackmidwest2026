@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"trailmix/internal/auth"
 	"trailmix/internal/httpx"
 )
@@ -21,9 +23,15 @@ type Payment struct {
 
 const paymentCols = "id, trip_id, provider, provider_ref, amount_usd, status, memo, created_at"
 
+func scanPayment(row scanner) (Payment, error) {
+	var p Payment
+	err := row.Scan(&p.ID, &p.TripID, &p.Provider, &p.ProviderRef, &p.AmountUSD, &p.Status, &p.Memo, &p.CreatedAt)
+	return p, err
+}
+
 func (d *Deps) listPayments(w http.ResponseWriter, r *http.Request) {
 	c := auth.FromContext(r.Context())
-	rows, err := d.DB.Query(r.Context(), "SELECT "+paymentCols+" FROM payments WHERE user_id=$1 ORDER BY created_at DESC", c.UserID)
+	rows, err := d.DB.QueryContext(r.Context(), "SELECT "+paymentCols+" FROM payments WHERE user_id=? ORDER BY created_at DESC", c.UserID)
 	if err != nil {
 		httpx.Error(w, 500, "query failed")
 		return
@@ -31,8 +39,8 @@ func (d *Deps) listPayments(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	out := []Payment{}
 	for rows.Next() {
-		var p Payment
-		if err := rows.Scan(&p.ID, &p.TripID, &p.Provider, &p.ProviderRef, &p.AmountUSD, &p.Status, &p.Memo, &p.CreatedAt); err != nil {
+		p, err := scanPayment(rows)
+		if err != nil {
 			httpx.Error(w, 500, "scan failed")
 			return
 		}
@@ -58,18 +66,21 @@ func (d *Deps) createPayment(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 502, err.Error())
 		return
 	}
-	var p Payment
-	err = d.DB.QueryRow(r.Context(),
-		`INSERT INTO payments (user_id, trip_id, provider_ref, amount_usd, status, memo)
-		 VALUES ($1,$2,$3,$4,$5,$6) RETURNING `+paymentCols,
-		c.UserID, in.TripID, res.ProviderRef, in.AmountUSD, res.Status, in.Memo).
-		Scan(&p.ID, &p.TripID, &p.Provider, &p.ProviderRef, &p.AmountUSD, &p.Status, &p.Memo, &p.CreatedAt)
+	id := uuid.NewString()
+	_, err = d.DB.ExecContext(r.Context(),
+		`INSERT INTO payments (id, user_id, trip_id, provider_ref, amount_usd, status, memo) VALUES (?,?,?,?,?,?,?)`,
+		id, c.UserID, in.TripID, res.ProviderRef, in.AmountUSD, res.Status, in.Memo)
 	if err != nil {
 		httpx.Error(w, 500, "could not record payment")
 		return
 	}
+	p, err := scanPayment(d.DB.QueryRowContext(r.Context(), "SELECT "+paymentCols+" FROM payments WHERE id=?", id))
+	if err != nil {
+		httpx.Error(w, 500, "could not load payment")
+		return
+	}
 	if in.TripID != nil && res.Status == "settled" {
-		_, _ = d.DB.Exec(r.Context(), "UPDATE trips SET status='booked', updated_at=now() WHERE id=$1 AND user_id=$2", *in.TripID, c.UserID)
+		_, _ = d.DB.ExecContext(r.Context(), "UPDATE trips SET status='booked' WHERE id=? AND user_id=?", *in.TripID, c.UserID)
 	}
 	httpx.JSON(w, 201, map[string]any{"payment": p, "mock": res.Mock})
 }

@@ -27,7 +27,7 @@ export default function NewTrip() {
   return (
     <div className="grid gap-6">
       <div>
-        <div className="mono text-xs text-muted prompt">trailmix new</div>
+        <div className="mono text-xs text-muted prompt">tpn new</div>
         <h1 className="mono text-2xl font-bold mt-1">new trip</h1>
       </div>
       <TripForm onSubmit={submit} busy={busy} submitLabel="save & plan" />

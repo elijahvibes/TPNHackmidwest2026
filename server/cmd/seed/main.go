@@ -12,6 +12,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
+
 	"trailmix/internal/ai"
 	"trailmix/internal/auth"
 	"trailmix/internal/config"
@@ -31,18 +33,21 @@ func main() {
 	defer pool.Close()
 
 	hash, _ := auth.HashPassword("demo1234")
-	var userID string
-	err = pool.QueryRow(ctx, `
-		INSERT INTO users (email, name, password_hash, home_city, home_lat, home_lng)
-		VALUES ($1, $2, $3, 'Kansas City', 39.0997, -94.5786)
-		ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
-		RETURNING id`, "demo@trailmix.app", "Demo Traveler", hash).Scan(&userID)
+	_, err = pool.ExecContext(ctx, `
+		INSERT INTO users (id, email, name, password_hash, home_city, home_lat, home_lng)
+		VALUES (?, ?, ?, ?, 'Kansas City', 39.0997, -94.5786)
+		ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)`,
+		uuid.NewString(), "demo@trailmix.app", "Demo Traveler", hash)
 	if err != nil {
 		log.Fatalf("upsert user: %v", err)
 	}
+	var userID string
+	if err := pool.QueryRowContext(ctx, "SELECT id FROM users WHERE email=?", "demo@trailmix.app").Scan(&userID); err != nil {
+		log.Fatalf("load user: %v", err)
+	}
 
 	var n int
-	_ = pool.QueryRow(ctx, "SELECT count(*) FROM trips WHERE user_id=$1", userID).Scan(&n)
+	_ = pool.QueryRowContext(ctx, "SELECT count(*) FROM trips WHERE user_id=?", userID).Scan(&n)
 	if n > 0 {
 		log.Printf("demo user %s already has %d trips; nothing to do", userID, n)
 		return
@@ -68,10 +73,10 @@ func main() {
 			log.Fatalf("plan %s→%s: %v", req.Origin, req.Destination, err)
 		}
 		raw, _ := json.Marshal(plan)
-		_, err = pool.Exec(ctx, `
-			INSERT INTO trips (user_id, title, origin, destination, start_date, end_date, travelers, budget_usd, mode, status, plan)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'planned',$10)`,
-			userID, req.Origin+" to "+req.Destination, req.Origin, req.Destination, req.StartDate, req.EndDate, req.Travelers, req.BudgetUSD, req.Mode, raw)
+		_, err = pool.ExecContext(ctx, `
+			INSERT INTO trips (id, user_id, title, origin, destination, start_date, end_date, travelers, budget_usd, mode, status, plan)
+			VALUES (?,?,?,?,?,?,?,?,?,?,'planned',?)`,
+			uuid.NewString(), userID, req.Origin+" to "+req.Destination, req.Origin, req.Destination, req.StartDate, req.EndDate, req.Travelers, req.BudgetUSD, req.Mode, string(raw))
 		if err != nil {
 			log.Fatalf("insert trip: %v", err)
 		}

@@ -1,19 +1,20 @@
 services:
-  # Local Postgres for dev only. In prod we use the Akamai (Linode) Managed Database:
-  # set DATABASE_URL in .env and this service is simply not started.
+  # Local MySQL for dev only. In prod we use the Akamai (Linode) Managed MySQL
+  # database: set DATABASE_URL in .env and this service is simply not started.
   db:
-    image: postgres:16-alpine
+    image: mysql:8.4
     profiles: ["local"]
     environment:
-      POSTGRES_USER: trailmix
-      POSTGRES_PASSWORD: trailmix
-      POSTGRES_DB: trailmix
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: trailmix
+      MYSQL_PASSWORD: trailmix
+      MYSQL_DATABASE: trailmix
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mysqldata:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trailmix"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-utrailmix", "-ptrailmix"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -34,4 +35,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  mysqldata:

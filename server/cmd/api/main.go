@@ -69,7 +69,7 @@ func main() {
 		r.NotFound(spaHandler(cfg.StaticDir))
 	}
 
-	log.Printf("trailmix api listening on :%s (ai=%v amadeus=%v payments=%v static=%q)",
+	log.Printf("TPN api listening on :%s (ai=%v amadeus=%v payments=%v static=%q)",
 		cfg.Port, deps.Planner.AI.Enabled(), deps.Planner.Amadeus.Enabled(), deps.Payments.Live(), cfg.StaticDir)
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r, ReadHeaderTimeout: 10 * time.Second}
 	if err := srv.ListenAndServe(); err != nil {

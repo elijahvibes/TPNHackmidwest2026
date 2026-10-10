@@ -1,6 +1,6 @@
-# trailmix — HackMidwest 2026
+# TPN — HackMidwest 2026
 
-AI vacation planner that prices the whole trip (flights, gas for *your* car, hotels, things to do,
+TPN is an AI vacation planner that prices the whole trip (flights, gas for *your* car, hotels, things to do,
 stops along the way) and picks the best value. Go backend, TypeScript/React frontend, Postgres,
 AI inference and hosting on Akamai, payments through Jack Henry.
 
@@ -17,17 +17,20 @@ Requirements: Go 1.24+, Node 20+, Docker (for Postgres).
 cp .env.example .env          # fill in any keys you have; everything else mocks itself
 ```
 
-Postgres, pick one:
+MySQL, pick one:
 
 ```bash
-docker compose --profile local up -d db     # Docker
+docker compose --profile local up -d db     # Docker (mysql:8.4)
 ```
 
 ```powershell
-.\scripts\dev-db.ps1                        # Windows, no Docker: portable Postgres in .pg/
+.\scripts\dev-db.ps1                        # Windows, no Docker: portable MariaDB in .mariadb/
 ```
 
-Or point `DATABASE_URL` at the team's Akamai Managed Database (see `.env.example`; add your IP to its access list).
+Prod uses the team's Akamai Managed MySQL database. Its `private-…` hostname only resolves inside
+Akamai, so laptops use a local database and the Linode uses the managed one (`.env.linode` → `.env` on the server).
+
+The Go server loads `.env` from the repo root automatically; real environment variables win.
 
 Demo data: `cd server && go run ./cmd/seed` creates `demo@trailmix.app` / `demo1234` with two planned trips.
 Smoke test: `scripts/smoke.sh [base-url]` exercises every endpoint.
@@ -45,9 +48,6 @@ cd web && npm install && npm run dev
 ```
 
 Open http://localhost:5173. Vite proxies `/api` to the Go server on :8080.
-The Go server reads `.env` only through the environment, so on Windows use
-`Get-Content ..\.env | ForEach-Object { if ($_ -match '^(\w+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2]) } }`
-in PowerShell before `go run`, or just set the variables you need.
 
 ## API
 
@@ -83,12 +83,13 @@ One Linode (a 2 GB shared instance is enough for the app; the model runs elsewhe
 # on the Linode (Ubuntu)
 apt update && apt install -y docker.io docker-compose-v2 git
 git clone https://github.com/elijahvibes/TPNHackmidwest2026.git trailmix && cd trailmix
-cp .env.example .env && nano .env       # DATABASE_URL (Akamai managed DB), JWT_SECRET, AI_BASE_URL, keys…
+scp .env.linode <linode>:trailmix/.env     # from a laptop that has it; then add AI_BASE_URL + keys
 docker compose --profile prod up -d --build
 ```
 
 That builds the UI, compiles the Go binary, and serves both on port 80. The database is the
-Akamai Managed Database; add the Linode's IP to its access controls first. Redeploys: `./scripts/deploy.sh`.
+Akamai Managed MySQL; the Linode must be in the same region/VLAN for the `private-` host, or add the
+Linode's IP to the database's access controls and use the public host. Redeploys: `./scripts/deploy.sh`.
 Point a domain at the Linode IP and put Caddy in front for TLS if there is time.
 
 **AI on Akamai**: set `AI_BASE_URL` to your Akamai Inference Cloud endpoint (OpenAI-compatible, ends in `/v1`)

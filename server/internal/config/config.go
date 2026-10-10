@@ -3,7 +3,9 @@ package config
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Config is read once from the environment at startup. Every external
@@ -42,10 +44,39 @@ func env(key, def string) string {
 	return def
 }
 
+// loadDotEnv reads KEY=VALUE lines from the first .env found in the working
+// directory or its parent (repo root when running from server/). Real
+// environment variables always win, so Docker/Linode config is unaffected.
+func loadDotEnv() {
+	for _, p := range []string{".env", filepath.Join("..", ".env")} {
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(raw), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			k, v, ok := strings.Cut(line, "=")
+			if !ok {
+				continue
+			}
+			k, v = strings.TrimSpace(k), strings.Trim(strings.TrimSpace(v), `"'`)
+			if os.Getenv(k) == "" {
+				os.Setenv(k, v)
+			}
+		}
+		log.Printf("loaded %s", p)
+		return
+	}
+}
+
 func Load() Config {
+	loadDotEnv()
 	c := Config{
 		Port:             env("PORT", "8080"),
-		DatabaseURL:      env("DATABASE_URL", "postgres://trailmix:trailmix@localhost:5432/trailmix?sslmode=disable"),
+		DatabaseURL:      env("DATABASE_URL", "mysql://trailmix:trailmix@localhost:3306/trailmix"),
 		JWTSecret:        env("JWT_SECRET", ""),
 		StaticDir:        env("STATIC_DIR", ""),
 		CORSOrigin:       env("CORS_ORIGIN", "http://localhost:5173"),

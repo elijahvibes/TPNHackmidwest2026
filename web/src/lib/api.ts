@@ -59,7 +59,7 @@ export type PlanRequest = {
   interests?: string[]; origin_loc?: LatLng
 }
 
-const TOKEN_KEY = 'trailmix.token'
+const TOKEN_KEY = 'tpn.token'
 export const token = {
   get: () => { try { return localStorage.getItem(TOKEN_KEY) } catch { return null } },
   set: (t: string) => { try { localStorage.setItem(TOKEN_KEY, t) } catch { /* ignore */ } },

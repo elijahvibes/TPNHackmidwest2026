@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
+	"github.com/google/uuid"
 
 	"trailmix/internal/auth"
 	"trailmix/internal/httpx"
@@ -29,9 +29,9 @@ type Trip struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
-const tripCols = "id, title, origin, destination, start_date::text, end_date::text, travelers, budget_usd, mode, status, plan, created_at"
+const tripCols = "id, title, origin, destination, DATE_FORMAT(start_date,'%Y-%m-%d'), DATE_FORMAT(end_date,'%Y-%m-%d'), travelers, budget_usd, mode, status, plan, created_at"
 
-func scanTrip(row pgx.Row) (Trip, error) {
+func scanTrip(row scanner) (Trip, error) {
 	var t Trip
 	var plan []byte
 	err := row.Scan(&t.ID, &t.Title, &t.Origin, &t.Destination, &t.StartDate, &t.EndDate, &t.Travelers, &t.BudgetUSD, &t.Mode, &t.Status, &plan, &t.CreatedAt)
@@ -41,9 +41,13 @@ func scanTrip(row pgx.Row) (Trip, error) {
 	return t, err
 }
 
+func (d *Deps) tripByID(r *http.Request, id, userID string) (Trip, error) {
+	return scanTrip(d.DB.QueryRowContext(r.Context(), "SELECT "+tripCols+" FROM trips WHERE id=? AND user_id=?", id, userID))
+}
+
 func (d *Deps) listTrips(w http.ResponseWriter, r *http.Request) {
 	c := auth.FromContext(r.Context())
-	rows, err := d.DB.Query(r.Context(), "SELECT "+tripCols+" FROM trips WHERE user_id=$1 ORDER BY created_at DESC", c.UserID)
+	rows, err := d.DB.QueryContext(r.Context(), "SELECT "+tripCols+" FROM trips WHERE user_id=? ORDER BY created_at DESC", c.UserID)
 	if err != nil {
 		httpx.Error(w, 500, "query failed")
 		return
@@ -92,12 +96,18 @@ func (d *Deps) createTrip(w http.ResponseWriter, r *http.Request) {
 	if in.Title == "" {
 		in.Title = in.Origin + " to " + in.Destination
 	}
-	t, err := scanTrip(d.DB.QueryRow(r.Context(),
-		`INSERT INTO trips (user_id, title, origin, destination, start_date, end_date, travelers, budget_usd, mode)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+tripCols,
-		c.UserID, in.Title, in.Origin, in.Destination, in.StartDate, in.EndDate, in.Travelers, in.BudgetUSD, in.Mode))
+	id := uuid.NewString()
+	_, err := d.DB.ExecContext(r.Context(),
+		`INSERT INTO trips (id, user_id, title, origin, destination, start_date, end_date, travelers, budget_usd, mode)
+		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		id, c.UserID, in.Title, in.Origin, in.Destination, in.StartDate, in.EndDate, in.Travelers, in.BudgetUSD, in.Mode)
 	if err != nil {
 		httpx.Error(w, 400, "could not create trip: "+err.Error())
+		return
+	}
+	t, err := d.tripByID(r, id, c.UserID)
+	if err != nil {
+		httpx.Error(w, 500, "could not load trip")
 		return
 	}
 	httpx.JSON(w, 201, t)
@@ -105,7 +115,7 @@ func (d *Deps) createTrip(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) getTrip(w http.ResponseWriter, r *http.Request) {
 	c := auth.FromContext(r.Context())
-	t, err := scanTrip(d.DB.QueryRow(r.Context(), "SELECT "+tripCols+" FROM trips WHERE id=$1 AND user_id=$2", chi.URLParam(r, "id"), c.UserID))
+	t, err := d.tripByID(r, chi.URLParam(r, "id"), c.UserID)
 	if err != nil {
 		httpx.Error(w, 404, "trip not found")
 		return
@@ -115,8 +125,12 @@ func (d *Deps) getTrip(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) deleteTrip(w http.ResponseWriter, r *http.Request) {
 	c := auth.FromContext(r.Context())
-	tag, err := d.DB.Exec(r.Context(), "DELETE FROM trips WHERE id=$1 AND user_id=$2", chi.URLParam(r, "id"), c.UserID)
-	if err != nil || tag.RowsAffected() == 0 {
+	res, err := d.DB.ExecContext(r.Context(), "DELETE FROM trips WHERE id=? AND user_id=?", chi.URLParam(r, "id"), c.UserID)
+	if err != nil {
+		httpx.Error(w, 500, "delete failed")
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
 		httpx.Error(w, 404, "trip not found")
 		return
 	}
@@ -126,7 +140,7 @@ func (d *Deps) deleteTrip(w http.ResponseWriter, r *http.Request) {
 // planTrip runs the planner for a saved trip and stores the result.
 func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 	c := auth.FromContext(r.Context())
-	t, err := scanTrip(d.DB.QueryRow(r.Context(), "SELECT "+tripCols+" FROM trips WHERE id=$1 AND user_id=$2", chi.URLParam(r, "id"), c.UserID))
+	t, err := d.tripByID(r, chi.URLParam(r, "id"), c.UserID)
 	if err != nil {
 		httpx.Error(w, 404, "trip not found")
 		return
@@ -149,7 +163,7 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw, _ := json.Marshal(plan)
-	if _, err := d.DB.Exec(r.Context(), "UPDATE trips SET plan=$1, status='planned', updated_at=now() WHERE id=$2", raw, t.ID); err != nil {
+	if _, err := d.DB.ExecContext(r.Context(), "UPDATE trips SET plan=?, status='planned' WHERE id=?", string(raw), t.ID); err != nil {
 		httpx.Error(w, 500, "save failed")
 		return
 	}

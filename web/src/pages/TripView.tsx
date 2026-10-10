@@ -22,7 +22,7 @@ export default function TripView() {
     if (!trip?.plan) return
     setBusy('charging via Jack Henry…'); setErr('')
     try {
-      const r = await api.pay(trip.id, trip.plan.total_usd, `TrailMix: ${trip.title}`)
+      const r = await api.pay(trip.id, trip.plan.total_usd, `TPN: ${trip.title}`)
       setReceipt({ ref: r.payment.provider_ref, mock: r.mock })
       await load()
     } catch (e) { setErr((e as Error).message) } finally { setBusy('') }

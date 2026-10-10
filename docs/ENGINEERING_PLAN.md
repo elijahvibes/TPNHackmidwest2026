@@ -19,7 +19,7 @@ untested (needs Postgres or an API key) · ⬜ not started.
 |---|---|---|---|
 | HTTP server, CORS, static SPA serving | `cmd/api/main.go` | ✅ | Runs in degraded mode if Postgres is down |
 | Config from env | `internal/config` | ✅ | Every integration optional |
-| Postgres + auto-migrations | `internal/db`, `migrations/001_init.sql` | 🟡 | Tables: users, vehicles, trips, payments |
+| MySQL (Akamai managed) + auto-migrations | `internal/db`, `migrations/001_init.sql` | ✅ | Tables: users, vehicles, trips, payments |
 | Register / login / me / update home location | `internal/handlers/auth.go` | 🟡 | bcrypt + 7-day JWT |
 | Trips CRUD + plan + preview | `internal/handlers/trips.go` | 🟡 preview ✅ | Plan stored as JSONB on the trip |
 | Payments (Jack Henry) | `internal/handlers/payments.go`, `internal/payments` | 🟡 mock ✅ | Generic REST shape, needs sandbox docs |
@@ -64,7 +64,7 @@ untested (needs Postgres or an API key) · ⬜ not started.
    ▼
  Go API  ──────────────────────────────┐
    ├─ handlers  (auth, trips, payments)│
-   ├─ planner   (orchestrates below)   │   Postgres (users, vehicles, trips.plan JSONB, payments)
+   ├─ planner   (orchestrates below)   │   Akamai Managed MySQL (users, vehicles, trips.plan JSON, payments)
    │    ├─ travel.Geo      → Mapbox            (geocode, directions)
    │    ├─ travel.Fuel     → fueleconomy.gov    (MPG, no key)   + EIA (gas $/gal)
    │    ├─ travel.Amadeus  → Amadeus test API   (flights, hotels)
@@ -220,7 +220,7 @@ what does not. The "no-input" column is being worked by Claude in this session; 
 
 | Task | What changes |
 |---|---|
-| A1 | `scripts/dev-db.ps1`: portable Postgres, no Docker, no admin |
+| A1 | `scripts/dev-db.ps1`: portable MariaDB, no Docker, no admin |
 | E1 | End-to-end account → trip → plan → book verified against real Postgres |
 | H1 | `go run ./cmd/seed`: demo user + planned trips |
 | H2 | `scripts/smoke.sh`: hits every endpoint, green or red |

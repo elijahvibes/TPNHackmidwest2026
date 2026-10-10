@@ -20,7 +20,7 @@ export default function Landing() {
   return (
     <div className="grid gap-8">
       <section className="pt-6">
-        <div className="mono text-xs text-muted prompt">trailmix plan --from "home" --to "anywhere" --optimize value</div>
+        <div className="mono text-xs text-muted prompt">tpn plan --from "home" --to "anywhere" --optimize value</div>
         <h1 className="mono text-4xl sm:text-5xl font-bold mt-3 leading-tight">
           Plan the whole trip.<br /><span className="text-accent">Pay the least for it.</span><span className="caret" />
         </h1>

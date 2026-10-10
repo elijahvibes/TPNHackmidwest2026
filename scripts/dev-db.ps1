@@ -1,55 +1,55 @@
-# Portable PostgreSQL for local dev on Windows, no Docker and no admin install.
-#   .\scripts\dev-db.ps1          # download (first time), init, start on :5432
+# Portable MariaDB (MySQL-compatible) for local dev on Windows: no Docker, no admin install.
+# Prod uses the Akamai Managed MySQL database; this mirrors it locally.
+#   .\scripts\dev-db.ps1          # download (first time), init, start on :3306
 #   .\scripts\dev-db.ps1 stop
-#   .\scripts\dev-db.ps1 psql     # open a psql shell
+#   .\scripts\dev-db.ps1 sql      # open a SQL shell
 # Credentials match .env.example: trailmix / trailmix, database trailmix.
 param([string]$cmd = 'start')
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $root = Split-Path -Parent $PSScriptRoot
-$pg   = Join-Path $root '.pg'
-$bin  = Join-Path $pg 'pgsql\bin'
-$data = Join-Path $pg 'data'
-$log  = Join-Path $pg 'pg.log'
-$ver  = '17.6-1'
-$env:PGPASSWORD = 'trailmix'
+$home_ = Join-Path $root '.mariadb'
+$ver  = '11.4.8'
+$dist = Join-Path $home_ "mariadb-$ver-winx64"
+$bin  = Join-Path $dist 'bin'
+$data = Join-Path $home_ 'data'
+$log  = Join-Path $home_ 'mariadb.log'
+$rootPw = 'trailmix'
 
 if ($cmd -eq 'stop') {
-  & "$bin\pg_ctl.exe" -D $data stop -m fast
+  & "$bin\mariadb-admin.exe" -uroot -p$rootPw --port=3306 shutdown
   exit $LASTEXITCODE
 }
-if ($cmd -eq 'psql') {
-  & "$bin\psql.exe" -h localhost -p 5432 -U trailmix -d trailmix
+if ($cmd -eq 'sql') {
+  & "$bin\mariadb.exe" -utrailmix -ptrailmix --port=3306 trailmix
   exit $LASTEXITCODE
 }
 
-if (-not (Test-Path "$bin\pg_ctl.exe")) {
-  New-Item -ItemType Directory -Force $pg | Out-Null
-  $zip = Join-Path $pg 'pg.zip'
-  Write-Host "Downloading portable PostgreSQL $ver (~350 MB, one time)..."
-  Invoke-WebRequest "https://get.enterprisedb.com/postgresql/postgresql-$ver-windows-x64-binaries.zip" -OutFile $zip
+if (-not (Test-Path "$bin\mariadbd.exe")) {
+  New-Item -ItemType Directory -Force $home_ | Out-Null
+  $zip = Join-Path $home_ 'mariadb.zip'
+  Write-Host "Downloading portable MariaDB $ver (one time)..."
+  Invoke-WebRequest "https://archive.mariadb.org/mariadb-$ver/winx64-packages/mariadb-$ver-winx64.zip" -OutFile $zip
   Write-Host "Extracting..."
-  Expand-Archive $zip -DestinationPath $pg -Force
+  Expand-Archive $zip -DestinationPath $home_ -Force
   Remove-Item $zip
 }
 
-if (-not (Test-Path "$data\PG_VERSION")) {
+if (-not (Test-Path "$data\mysql")) {
   Write-Host "Initializing data directory..."
-  $pwfile = Join-Path $pg 'pw.txt'
-  Set-Content $pwfile 'trailmix' -NoNewline
-  & "$bin\initdb.exe" -D $data -U trailmix --pwfile="$pwfile" -E UTF8 -A scram-sha-256 --locale=C | Out-Null
-  Remove-Item $pwfile
+  & "$bin\mariadb-install-db.exe" --datadir="$data" --password=$rootPw --port=3306 | Out-Null
 }
 
-& "$bin\pg_isready.exe" -h localhost -p 5432 2>$null | Out-Null
+& "$bin\mariadb-admin.exe" -uroot -p$rootPw --port=3306 --connect-timeout=2 ping 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) {
-  & "$bin\pg_ctl.exe" -D $data -l $log -o "-p 5432" -w start | Out-Null
+  Start-Process -FilePath "$bin\mariadbd.exe" -ArgumentList "--datadir=`"$data`"", "--port=3306", "--log-error=`"$log`"" -WindowStyle Hidden
+  for ($i = 0; $i -lt 30; $i++) {
+    Start-Sleep -Seconds 1
+    & "$bin\mariadb-admin.exe" -uroot -p$rootPw --port=3306 --connect-timeout=2 ping 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { break }
+  }
 }
 
-$exists = & "$bin\psql.exe" -h localhost -p 5432 -U trailmix -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='trailmix'"
-if ($exists -ne '1') {
-  & "$bin\createdb.exe" -h localhost -p 5432 -U trailmix trailmix
-  Write-Host "Created database trailmix"
-}
-Write-Host "PostgreSQL ready: postgres://trailmix:trailmix@localhost:5432/trailmix?sslmode=disable"
+& "$bin\mariadb.exe" -uroot -p$rootPw --port=3306 -e "CREATE DATABASE IF NOT EXISTS trailmix CHARACTER SET utf8mb4; CREATE USER IF NOT EXISTS 'trailmix'@'%' IDENTIFIED BY 'trailmix'; CREATE USER IF NOT EXISTS 'trailmix'@'localhost' IDENTIFIED BY 'trailmix'; GRANT ALL ON trailmix.* TO 'trailmix'@'%'; GRANT ALL ON trailmix.* TO 'trailmix'@'localhost'; FLUSH PRIVILEGES;"
+Write-Host "MariaDB ready: mysql://trailmix:trailmix@localhost:3306/trailmix"

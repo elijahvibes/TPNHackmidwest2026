@@ -9,7 +9,7 @@ export default function Layout() {
       <header className="border-b border-line bg-bg/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link to="/" className="mono font-bold text-ink flex items-center gap-2">
-            <span className="text-accent">~/</span>trailmix
+            <span className="text-accent">~/</span>tpn
           </Link>
           <nav className="mono text-sm flex items-center gap-5">
             {user ? (

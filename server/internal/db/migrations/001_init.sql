@@ -1,52 +1,55 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 CREATE TABLE IF NOT EXISTS users (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email         TEXT UNIQUE NOT NULL,
-    name          TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    home_lat      DOUBLE PRECISION,
-    home_lng      DOUBLE PRECISION,
-    home_city     TEXT,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+    id            CHAR(36)     NOT NULL PRIMARY KEY,
+    email         VARCHAR(255) NOT NULL UNIQUE,
+    name          VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    home_lat      DOUBLE       NULL,
+    home_lng      DOUBLE       NULL,
+    home_city     VARCHAR(255) NULL,
+    created_at    DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS vehicles (
-    id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    year      INT NOT NULL,
-    make      TEXT NOT NULL,
-    model     TEXT NOT NULL,
-    mpg       DOUBLE PRECISION NOT NULL,
-    fuel_type TEXT NOT NULL DEFAULT 'regular'
-);
+    id        CHAR(36)     NOT NULL PRIMARY KEY,
+    user_id   CHAR(36)     NOT NULL,
+    year      INT          NOT NULL,
+    make      VARCHAR(100) NOT NULL,
+    model     VARCHAR(100) NOT NULL,
+    mpg       DOUBLE       NOT NULL,
+    fuel_type VARCHAR(32)  NOT NULL DEFAULT 'regular',
+    CONSTRAINT vehicles_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS trips (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title       TEXT NOT NULL,
-    origin      TEXT NOT NULL,
-    destination TEXT NOT NULL,
-    start_date  DATE NOT NULL,
-    end_date    DATE NOT NULL,
-    travelers   INT NOT NULL DEFAULT 1,
-    budget_usd  NUMERIC(10,2),
-    mode        TEXT NOT NULL DEFAULT 'auto',   -- auto | drive | fly
-    status      TEXT NOT NULL DEFAULT 'draft',  -- draft | planned | booked
-    plan        JSONB,                          -- full itinerary + pricing from the planner
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS trips_user_idx ON trips(user_id, created_at DESC);
+    id          CHAR(36)      NOT NULL PRIMARY KEY,
+    user_id     CHAR(36)      NOT NULL,
+    title       VARCHAR(255)  NOT NULL,
+    origin      VARCHAR(255)  NOT NULL,
+    destination VARCHAR(255)  NOT NULL,
+    start_date  DATE          NOT NULL,
+    end_date    DATE          NOT NULL,
+    travelers   INT           NOT NULL DEFAULT 1,
+    budget_usd  DECIMAL(10,2) NULL,
+    mode        VARCHAR(16)   NOT NULL DEFAULT 'auto',   -- auto | drive | fly
+    status      VARCHAR(16)   NOT NULL DEFAULT 'draft',  -- draft | planned | booked
+    plan        JSON          NULL,                       -- full itinerary + pricing from the planner
+    created_at  DATETIME(6)   NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at  DATETIME(6)   NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    INDEX trips_user_idx (user_id, created_at),
+    CONSTRAINT trips_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS payments (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    trip_id       UUID REFERENCES trips(id) ON DELETE SET NULL,
-    provider      TEXT NOT NULL DEFAULT 'jackhenry',
-    provider_ref  TEXT,
-    amount_usd    NUMERIC(10,2) NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'pending', -- pending | settled | failed
-    memo          TEXT,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+    id           CHAR(36)      NOT NULL PRIMARY KEY,
+    user_id      CHAR(36)      NOT NULL,
+    trip_id      CHAR(36)      NULL,
+    provider     VARCHAR(32)   NOT NULL DEFAULT 'jackhenry',
+    provider_ref VARCHAR(128)  NULL,
+    amount_usd   DECIMAL(10,2) NOT NULL,
+    status       VARCHAR(16)   NOT NULL DEFAULT 'pending', -- pending | settled | failed
+    memo         VARCHAR(255)  NULL,
+    created_at   DATETIME(6)   NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    INDEX payments_user_idx (user_id, created_at),
+    CONSTRAINT payments_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT payments_trip_fk FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

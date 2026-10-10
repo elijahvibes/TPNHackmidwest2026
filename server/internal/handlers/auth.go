@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 
 	"trailmix/internal/auth"
 	"trailmix/internal/httpx"
@@ -23,10 +23,21 @@ type User struct {
 
 const userCols = "id, email, name, home_city, home_lat, home_lng"
 
-func scanUser(row pgx.Row) (User, error) {
+type scanner interface{ Scan(dest ...any) error }
+
+func scanUser(row scanner) (User, error) {
 	var u User
 	err := row.Scan(&u.ID, &u.Email, &u.Name, &u.HomeCity, &u.HomeLat, &u.HomeLng)
 	return u, err
+}
+
+func (d *Deps) userByID(r *http.Request, id string) (User, error) {
+	return scanUser(d.DB.QueryRowContext(r.Context(), "SELECT "+userCols+" FROM users WHERE id=?", id))
+}
+
+func isDuplicate(err error) bool {
+	var me *mysql.MySQLError
+	return errors.As(err, &me) && me.Number == 1062
 }
 
 func (d *Deps) register(w http.ResponseWriter, r *http.Request) {
@@ -49,16 +60,21 @@ func (d *Deps) register(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 500, "hash failed")
 		return
 	}
-	u, err := scanUser(d.DB.QueryRow(r.Context(),
-		"INSERT INTO users (email, name, password_hash) VALUES ($1,$2,$3) RETURNING "+userCols,
-		in.Email, strings.TrimSpace(in.Name), hash))
+	id := uuid.NewString()
+	_, err = d.DB.ExecContext(r.Context(),
+		"INSERT INTO users (id, email, name, password_hash) VALUES (?,?,?,?)",
+		id, in.Email, strings.TrimSpace(in.Name), hash)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if isDuplicate(err) {
 			httpx.Error(w, 409, "email already registered")
 			return
 		}
 		httpx.Error(w, 500, "could not create user")
+		return
+	}
+	u, err := d.userByID(r, id)
+	if err != nil {
+		httpx.Error(w, 500, "could not load user")
 		return
 	}
 	d.issue(w, u)
@@ -75,8 +91,8 @@ func (d *Deps) login(w http.ResponseWriter, r *http.Request) {
 	}
 	var u User
 	var hash string
-	err := d.DB.QueryRow(r.Context(),
-		"SELECT "+userCols+", password_hash FROM users WHERE email=$1", strings.ToLower(strings.TrimSpace(in.Email))).
+	err := d.DB.QueryRowContext(r.Context(),
+		"SELECT "+userCols+", password_hash FROM users WHERE email=?", strings.ToLower(strings.TrimSpace(in.Email))).
 		Scan(&u.ID, &u.Email, &u.Name, &u.HomeCity, &u.HomeLat, &u.HomeLng, &hash)
 	if err != nil || !auth.CheckPassword(hash, in.Password) {
 		httpx.Error(w, 401, "wrong email or password")
@@ -96,7 +112,7 @@ func (d *Deps) issue(w http.ResponseWriter, u User) {
 
 func (d *Deps) me(w http.ResponseWriter, r *http.Request) {
 	c := auth.FromContext(r.Context())
-	u, err := scanUser(d.DB.QueryRow(r.Context(), "SELECT "+userCols+" FROM users WHERE id=$1", c.UserID))
+	u, err := d.userByID(r, c.UserID)
 	if err != nil {
 		httpx.Error(w, 404, "user not found")
 		return
@@ -116,11 +132,16 @@ func (d *Deps) updateMe(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "invalid json")
 		return
 	}
-	u, err := scanUser(d.DB.QueryRow(r.Context(),
-		`UPDATE users SET home_city=COALESCE($2,home_city), home_lat=COALESCE($3,home_lat), home_lng=COALESCE($4,home_lng)
-		 WHERE id=$1 RETURNING `+userCols, c.UserID, in.HomeCity, in.HomeLat, in.HomeLng))
+	_, err := d.DB.ExecContext(r.Context(),
+		"UPDATE users SET home_city=COALESCE(?,home_city), home_lat=COALESCE(?,home_lat), home_lng=COALESCE(?,home_lng) WHERE id=?",
+		in.HomeCity, in.HomeLat, in.HomeLng, c.UserID)
 	if err != nil {
 		httpx.Error(w, 500, "update failed")
+		return
+	}
+	u, err := d.userByID(r, c.UserID)
+	if err != nil {
+		httpx.Error(w, 404, "user not found")
 		return
 	}
 	httpx.JSON(w, 200, u)

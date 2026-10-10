@@ -307,7 +307,7 @@ func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start ti
 		"drive": plan.Drive, "best_flight": first(plan.Flights), "best_hotel": first(plan.Hotels),
 		"activities": plan.Activities, "food": plan.Food, "stops": plan.Stops,
 	})
-	system := `You are TrailMix, a sharp, budget-savvy travel planner. You are given REAL price data; never invent prices, only use the numbers provided. Reply with a single JSON object: {"summary": string (2-3 sentences, mention total cost and why this mode is the best value), "days": [{"day": int, "date": "YYYY-MM-DD", "theme": string, "items": [{"time": "HH:MM", "title": string, "detail": string, "cost_usd": number, "category": "transport|lodging|activity|food|stop"}]}]}. Day 1 starts with travel from origin; the last day ends with travel home. Use the activities, food and stops lists by name. Keep each day to 4-6 items.`
+	system := `You are TPN, a sharp, budget-savvy travel planner. You are given REAL price data; never invent prices, only use the numbers provided. Reply with a single JSON object: {"summary": string (2-3 sentences, mention total cost and why this mode is the best value), "days": [{"day": int, "date": "YYYY-MM-DD", "theme": string, "items": [{"time": "HH:MM", "title": string, "detail": string, "cost_usd": number, "category": "transport|lodging|activity|food|stop"}]}]}. Day 1 starts with travel from origin; the last day ends with travel home. Use the activities, food and stops lists by name. Keep each day to 4-6 items.`
 	var out aiResponse
 	if err := p.AI.ChatJSON(ctx, system, string(data), &out); err != nil {
 		return err

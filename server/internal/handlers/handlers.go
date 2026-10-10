@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"trailmix/internal/auth"
 	"trailmix/internal/httpx"
@@ -15,7 +15,7 @@ import (
 
 // Deps is everything a handler can reach. Built once in main.
 type Deps struct {
-	DB       *pgxpool.Pool
+	DB       *sql.DB
 	Auth     *auth.Service
 	Planner  *planner.Planner
 	Fuel     *travel.Fuel
