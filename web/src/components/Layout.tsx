@@ -16,6 +16,7 @@ export default function Layout() {
               <>
                 <NavLink to="/app" className={({ isActive }) => isActive ? 'text-accent' : 'text-muted hover:text-ink'}>trips</NavLink>
                 <NavLink to="/app/new" className={({ isActive }) => isActive ? 'text-accent' : 'text-muted hover:text-ink'}>+ new</NavLink>
+                <NavLink to="/app/payments" className={({ isActive }) => isActive ? 'text-accent' : 'text-muted hover:text-ink'}>payments</NavLink>
                 <span className="text-dim hidden sm:inline">{user.email}</span>
                 <button className="btn-ghost !py-1" onClick={() => { logout(); nav('/') }}>logout</button>
               </>

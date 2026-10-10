@@ -121,7 +121,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	drive := p.Fuel.Drive(ctx, miles, minutes, req.VehicleMPG)
 	flights := p.Amadeus.Flights(ctx, travel.IATA(req.Origin), travel.IATA(req.Destination), req.StartDate, req.EndDate, req.Travelers)
 	hotels := p.Amadeus.Hotels(ctx, dest, req.StartDate, req.EndDate, nights, req.Destination)
-	activities := p.Places.Nearby(ctx, dest, "attraction", 6)
+	activities := p.activitiesFor(ctx, dest, req.Interests)
 	food := p.Places.Nearby(ctx, dest, "food", 4)
 	var stops []travel.Place
 	seen := map[string]bool{}
@@ -253,6 +253,44 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 		plan.Summary, plan.Days = fallbackItinerary(req, plan, start)
 	}
 	return plan, nil
+}
+
+// activitiesFor returns things to do shaped by the user's interests: a few per
+// chosen interest (deduped, interleaved so no single interest dominates),
+// topped up with general attractions. No interests → general attractions.
+func (p *Planner) activitiesFor(ctx context.Context, dest travel.LatLng, interests []string) []travel.Place {
+	const want = 6
+	var lists [][]travel.Place
+	for _, in := range interests {
+		if in == "food" { // food is handled by its own section
+			continue
+		}
+		if _, ok := map[string]bool{"outdoors": true, "museums": true, "nightlife": true, "family": true, "history": true}[in]; ok {
+			lists = append(lists, p.Places.Nearby(ctx, dest, in, 3))
+		}
+	}
+	lists = append(lists, p.Places.Nearby(ctx, dest, "attraction", want))
+	seen := map[string]bool{}
+	out := make([]travel.Place, 0, want)
+	for i := 0; len(out) < want; i++ {
+		progressed := false
+		for _, l := range lists {
+			if i < len(l) {
+				progressed = true
+				if !seen[l[i].Name] {
+					seen[l[i].Name] = true
+					out = append(out, l[i])
+					if len(out) == want {
+						break
+					}
+				}
+			}
+		}
+		if !progressed {
+			break
+		}
+	}
+	return out
 }
 
 // pickHotel moves the chosen stay to index 0: the best-rated option whose total

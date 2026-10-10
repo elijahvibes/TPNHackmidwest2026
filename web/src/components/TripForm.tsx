@@ -3,6 +3,8 @@ import { api, type LatLng, type PlanRequest } from '../lib/api'
 
 export type TripFormValue = PlanRequest & { title?: string }
 
+const INTERESTS = ['outdoors', 'museums', 'food', 'nightlife', 'family', 'history'] as const
+
 const today = new Date()
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const plus = (n: number) => { const d = new Date(today); d.setDate(d.getDate() + n); return d }
@@ -15,7 +17,7 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'plan it' }: {
   const [v, setV] = useState<TripFormValue>({
     origin: 'Kansas City', destination: 'Denver',
     start_date: iso(plus(14)), end_date: iso(plus(17)),
-    travelers: 2, budget_usd: 1200, mode: 'auto',
+    travelers: 2, budget_usd: 1200, mode: 'auto', interests: ['outdoors', 'food'],
   })
   const [car, setCar] = useState({ year: 2019, make: 'Honda', model: 'Civic' })
   const [mpgNote, setMpgNote] = useState<string>('')
@@ -84,6 +86,21 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'plan it' }: {
             <button type="button" className="btn-ghost whitespace-nowrap" onClick={lookupMPG}>mpg</button>
           </div>
           {mpgNote && <div className="mono text-[11px] text-muted mt-1">{mpgNote}</div>}
+        </div>
+      </div>
+
+      <div>
+        <label className="label">interests (shapes things to do)</label>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {INTERESTS.map(i => {
+            const on = v.interests?.includes(i)
+            return (
+              <button type="button" key={i} onClick={() => set('interests', on ? (v.interests ?? []).filter(x => x !== i) : [...(v.interests ?? []), i])}
+                className={`mono text-xs px-3 py-1 rounded-full border transition-colors ${on ? 'bg-accent text-bg border-accent' : 'border-line text-muted hover:border-accent hover:text-accent'}`}>
+                {on ? '✓ ' : ''}{i}
+              </button>
+            )
+          })}
         </div>
       </div>
 

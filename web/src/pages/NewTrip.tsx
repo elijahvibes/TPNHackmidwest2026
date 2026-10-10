@@ -19,7 +19,7 @@ export default function NewTrip() {
         travelers: v.travelers, budget_usd: v.budget_usd, mode: v.mode,
       })
       setStep('pricing flights, gas, hotels… asking the AI…')
-      await api.planTrip(trip.id, { vehicle_mpg: v.vehicle_mpg })
+      await api.planTrip(trip.id, { vehicle_mpg: v.vehicle_mpg, interests: v.interests })
       nav(`/app/trips/${trip.id}`)
     } catch (e) { setErr((e as Error).message); setBusy(false) }
   }

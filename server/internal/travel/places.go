@@ -36,7 +36,16 @@ var googleTypes = map[string][]string{
 	"attraction": {"tourist_attraction", "museum", "park"},
 	"food":       {"restaurant", "cafe"},
 	"rest_stop":  {"gas_station", "rest_stop"},
+	// interest-driven kinds (from the trip form)
+	"outdoors":  {"park", "hiking_area", "national_park", "campground"},
+	"museums":   {"museum", "art_gallery"},
+	"nightlife": {"bar", "night_club", "live_music_venue"},
+	"family":    {"amusement_park", "zoo", "aquarium"},
+	"history":   {"historical_landmark", "monument"},
 }
+
+// Interests lists the kinds a user can pick on the form, in display order.
+var Interests = []string{"outdoors", "museums", "food", "nightlife", "family", "history"}
 
 func (p *Places) google(ctx context.Context, at LatLng, kind string, limit int) []Place {
 	body := map[string]any{
@@ -124,6 +133,31 @@ func mockPlaces(at LatLng, kind string, limit int) []Place {
 			{Name: "Scenic Overlook", Rating: 4.6, PriceUSD: 0, Note: "15 min stretch break"},
 			{Name: "Roadside Pie Shop", Rating: 4.8, PriceUSD: 9, Note: "Worth the detour"},
 			{Name: "State Welcome Center", Rating: 4.0, PriceUSD: 0},
+		},
+		"outdoors": {
+			{Name: "Ridge Trail Loop", Rating: 4.8, PriceUSD: 0, Note: "6 mi, moderate"},
+			{Name: "Lakeside State Park", Rating: 4.6, PriceUSD: 8, Note: "Day pass per car"},
+			{Name: "Sunrise Kayak Rental", Rating: 4.7, PriceUSD: 35},
+		},
+		"museums": {
+			{Name: "City Art Museum", Rating: 4.6, PriceUSD: 18, Note: "Free first Fridays"},
+			{Name: "Natural History Museum", Rating: 4.5, PriceUSD: 20},
+			{Name: "Contemporary Gallery District", Rating: 4.4, PriceUSD: 0, Note: "Self-guided"},
+		},
+		"nightlife": {
+			{Name: "Downtown Jazz Lounge", Rating: 4.6, PriceUSD: 15, Note: "No cover before 9"},
+			{Name: "Rooftop Bar & Patio", Rating: 4.3, PriceUSD: 25},
+			{Name: "Live Music Hall", Rating: 4.7, PriceUSD: 30},
+		},
+		"family": {
+			{Name: "City Zoo", Rating: 4.6, PriceUSD: 22, Note: "Kids under 3 free"},
+			{Name: "Children's Science Center", Rating: 4.5, PriceUSD: 16},
+			{Name: "Adventure Mini Golf", Rating: 4.3, PriceUSD: 12},
+		},
+		"history": {
+			{Name: "Old Fort Historic Site", Rating: 4.5, PriceUSD: 10},
+			{Name: "Heritage Walking Tour", Rating: 4.6, PriceUSD: 15, Note: "90 min, guided"},
+			{Name: "Founders' Memorial", Rating: 4.4, PriceUSD: 0},
 		},
 	}
 	pool := pools[kind]

@@ -137,6 +137,37 @@ func TestSanitizeDays(t *testing.T) {
 	}
 }
 
+func TestInterestsShapeActivities(t *testing.T) {
+	p := newOffline()
+	base := Request{Origin: "Omaha", Destination: "Denver", StartDate: "2026-11-01", EndDate: "2026-11-03", Travelers: 1}
+	plain, err := p.Plan(context.Background(), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withInterests := base
+	withInterests.Interests = []string{"outdoors", "history"}
+	shaped, err := p.Plan(context.Background(), withInterests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shaped.Activities) == 0 || len(shaped.Activities) > 6 {
+		t.Fatalf("activities = %d, want 1..6", len(shaped.Activities))
+	}
+	names := map[string]bool{}
+	for _, a := range shaped.Activities {
+		if names[a.Name] {
+			t.Errorf("duplicate activity %q", a.Name)
+		}
+		names[a.Name] = true
+	}
+	if shaped.Activities[0].Category != "outdoors" {
+		t.Errorf("first activity should come from the first interest, got %q", shaped.Activities[0].Category)
+	}
+	if shaped.Activities[0].Name == plain.Activities[0].Name {
+		t.Error("interests had no effect on activities")
+	}
+}
+
 func TestPlanRejectsBadDates(t *testing.T) {
 	p := newOffline()
 	if _, err := p.Plan(context.Background(), Request{Origin: "Omaha", Destination: "Denver", StartDate: "2026-12-05", EndDate: "2026-12-01"}); err == nil {
