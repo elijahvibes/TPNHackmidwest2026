@@ -91,6 +91,7 @@ type Place struct {
 	PriceUSD       float64  `json:"price_usd"` // estimated per person, 0 = free
 	PriceUnknown   bool     `json:"price_unknown,omitempty"`
 	PriceEstimated bool     `json:"price_estimated,omitempty"` // PriceUSD is a typical-price guess, not from the provider
+	Popularity     float64  `json:"popularity,omitempty"`      // average daily Wikipedia page views; 0 = unknown
 	Location       LatLng   `json:"location"`
 	Note           string   `json:"note,omitempty"`
 	Source         string   `json:"source"`

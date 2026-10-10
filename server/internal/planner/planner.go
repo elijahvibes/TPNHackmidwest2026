@@ -120,7 +120,8 @@ type Planner struct {
 	Fuel    *travel.Fuel
 	SerpAPI TravelSearch
 	Places  *travel.Places
-	Weather *travel.NWS // nil = mock forecast (tests)
+	Weather *travel.NWS  // nil = mock forecast (tests)
+	Wiki    *travel.Wiki // nil = no popularity signal (tests)
 }
 
 // review runs the Reviewer agent over the written itinerary: a deterministic

@@ -49,6 +49,8 @@ export type Place = {
   name: string; category: string; categories?: string[]; rating: number; price_usd: number; price_unknown?: boolean
   /** price_usd is a typical-price estimate (category table or AI Curator), not from the provider */
   price_estimated?: boolean
+  /** average daily Wikipedia page views; a "how well known" signal */
+  popularity?: number
   location: LatLng; note?: string; source: string
 }
 export type PlanOption = {

@@ -102,6 +102,11 @@ export function planRealData(plan: Plan): string[] {
     if (osm > 0) {
       real.push(`${label}: ${osm} of ${places.length} places from OpenStreetMap (names and locations; costs are estimates).`)
     }
+    const wiki = (places ?? []).filter(place => place.source === 'wikipedia').length
+    const known = (places ?? []).filter(place => (place.popularity ?? 0) > 0).length
+    if (wiki > 0 || known > 0) {
+      real.push(`${label}: ${known} of ${places.length} places ranked by live Wikipedia readership${wiki > 0 ? `, ${wiki} added from Wikipedia` : ''}.`)
+    }
   }
   if (plan.drive.source === 'eia') real.push('Gas price: EIA weekly US regular gasoline price, not a local station quote.')
   if (plan.sources.route === 'mapbox') real.push('Driving distance and travel time: Mapbox Directions.')

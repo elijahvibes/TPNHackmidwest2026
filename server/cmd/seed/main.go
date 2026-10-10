@@ -62,6 +62,7 @@ func main() {
 		SerpAPI: travel.NewSerpAPI(cfg.SerpAPIKey),
 		Places:  travel.NewPlacesWithGeoapify(cfg.PlacesKey, cfg.GeoapifyKey).EnableOSM(aiClient),
 		Weather: travel.NewNWS(),
+		Wiki:    travel.NewWiki(),
 	}
 
 	start := time.Now().AddDate(0, 0, 14)
