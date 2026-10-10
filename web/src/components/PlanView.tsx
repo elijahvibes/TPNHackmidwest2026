@@ -2,6 +2,8 @@ import { hrs, usd, type Plan } from '../lib/api'
 import RouteMap from './RouteMap'
 import { SafetyCard, WeatherStrip } from './WeatherSafety'
 import FlightChooser from './FlightChooser'
+import DataWarning from './DataWarning'
+import { planDataWarnings, planRealData } from '../lib/dataWarnings'
 
 const catColor: Record<string, string> = {
   transport: 'text-cyan', lodging: 'text-amber', activity: 'text-accent', food: 'text-rose', stop: 'text-muted',
@@ -11,8 +13,24 @@ export default function PlanView({ plan, onSelectFlight, disabled }: {
   plan: Plan; onSelectFlight?: (index: number, returnToken?: string) => Promise<void>; disabled?: boolean
 }) {
   const best = plan.options.find(o => o.mode === plan.recommended_mode) ?? plan.options[0]
+  const realData = planRealData(plan)
   return (
     <div className="grid gap-6">
+      <DataWarning details={planDataWarnings(plan)} />
+      <section aria-label="Real provider data" className="rounded-lg border-2 border-accent bg-accent/5 p-5">
+        <h2 className="mono text-xl font-bold text-accent">REAL PROVIDER DATA USED IN THIS PLAN</h2>
+        {realData.length > 0 ? (
+          <ul className="mt-3 list-disc pl-5 grid gap-1 text-sm">
+            {realData.map(detail => <li key={detail}>{detail}</li>)}
+          </ul>
+        ) : (
+          <p className="mt-2 text-muted">No real provider results are identified in this plan.</p>
+        )}
+        <p className="mt-3 text-xs text-muted">
+          Based on the sources recorded when this plan was generated, not a new availability check.
+          Saved results may be out of date. Real search prices are not guaranteed booking quotes.
+        </p>
+      </section>
       {/* headline */}
       <section className="panel p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">

@@ -78,6 +78,28 @@ Open http://localhost:5173. Vite proxies `/api` to the Go server on :8080.
    missing credentials, provider failures or missing priced results return an explicit
    HTTP 502. Gas, routes and places retain their labeled fallbacks and estimates.
 
+## Mock and non-live data warnings
+
+Every displayed plan (preview, saved trip, or shared trip) shows a prominent red
+warning whenever its source tags or individual results indicate mock data,
+fallbacks, or estimates. The warning names the affected categories, including
+mixed live/mock attractions, restaurants, and rest stops. Static safety data,
+Google Places price-level cost estimates, and rule-based itineraries are identified
+separately rather than presented as live API results. Existing fallbacks remain enabled.
+
+Alongside the warning, a green "Real provider data used in this plan" section
+identifies actual flight/hotel results, Google Places names/locations/ratings,
+EIA gas prices, Mapbox directions, available NWS forecast days, and AI narration.
+Mixed live/mock categories show real-result counts as well as mock warnings.
+Empty results and static safety data are not labeled live. Provider provenance is
+recorded at plan generation; saved results are not newly checked, and Google
+Places costs remain estimates rather than real menu or admission prices.
+
+Payment screens also warn about configured mock mode and persisted `JH-MOCK-`
+receipts. Mock settlement does not move money or reserve travel.
+
+Warning detection tests: `node --test web/tests/dataWarnings.test.mjs` (Node 22.18+).
+
 ## Real flights and hotels with SerpApi
 
 Amadeus Self-Service was decommissioned in July 2026. Its integration has been replaced

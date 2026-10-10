@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, usd, type Trip } from '../lib/api'
 import PlanView from '../components/PlanView'
+import DataWarning from '../components/DataWarning'
 
 export default function TripView() {
   const { id = '' } = useParams()
@@ -10,9 +11,13 @@ export default function TripView() {
   const [busy, setBusy] = useState('')
   const [receipt, setReceipt] = useState<{ ref: string | null; mock: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
+  const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null)
 
   const load = () => api.trip(id).then(setTrip).catch(e => setErr((e as Error).message))
   useEffect(() => { load() }, [id])
+  useEffect(() => {
+    api.health().then(h => setPaymentsLive(h.payments)).catch(e => setErr((e as Error).message))
+  }, [])
 
   const replan = async () => {
     setBusy('re-planning…'); setErr('')
@@ -62,10 +67,15 @@ export default function TripView() {
       </div>
       {busy && <div className="mono text-sm text-cyan">{busy}<span className="caret" /></div>}
       {err && <div className="mono text-sm text-rose">error: {err}</div>}
+      <DataWarning details={receipt?.mock
+        ? ['Payment: simulated settlement only. No money was moved and no airline ticket or hotel was reserved.']
+        : paymentsLive === false && trip.status !== 'booked'
+          ? ['Payments: mock mode is enabled. The book button will simulate a payment, not move money or reserve travel.']
+          : []} />
       {receipt && (
         <div className="panel p-4 border-accent mono text-sm">
           <span className="text-accent">✓ payment settled</span> · ref {receipt.ref}
-          {receipt.mock && <span className="text-dim"> · mock mode (set JACKHENRY_BASE_URL to go live)</span>}
+          {receipt.mock && <span className="text-rose font-bold"> · simulated payment, not a real charge</span>}
         </div>
       )}
       {trip.plan ? <PlanView plan={trip.plan} onSelectFlight={selectFlight} disabled={!!busy || trip.status === 'booked'} /> : (
