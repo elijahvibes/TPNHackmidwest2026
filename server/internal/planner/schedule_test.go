@@ -71,8 +71,8 @@ func TestNormalizeLastDayBeforeFlightHome(t *testing.T) {
 		{Time: "11:00", Title: "Fly back to MCI", Category: "transport"},
 	}}}
 	notes := normalizeSchedule(plan, days)
-	// park 09:00 + 90 min + 3 h lead = 13:30 → the flight slides later rather than dropping the park
-	if got := times(days[1]); got != "09:00 MacIntosh Park | 13:30 Fly back to MCI" {
+	// park 09:00 + 2 h visit + 3 h lead = 14:00 → the flight slides later rather than dropping the park
+	if got := times(days[1]); got != "09:00 MacIntosh Park | 14:00 Fly back to MCI" {
 		t.Errorf("day 2: %s (%v)", got, notes)
 	}
 	days = []Day{{Day: 1}, {Day: 2, Items: []DayItem{
