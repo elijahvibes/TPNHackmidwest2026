@@ -9,6 +9,7 @@ export default function TripView() {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState('')
   const [receipt, setReceipt] = useState<{ ref: string | null; mock: boolean } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const load = () => api.trip(id).then(setTrip).catch(e => setErr((e as Error).message))
   useEffect(() => { load() }, [id])
@@ -39,6 +40,12 @@ export default function TripView() {
           <h1 className="mono text-2xl font-bold mt-1">{trip.title} <span className="tag ml-2">{trip.status}</span></h1>
         </div>
         <div className="flex gap-2">
+          {trip.plan && (
+            <button className="btn-ghost" onClick={async () => {
+              const url = `${location.origin}/share/${trip.id}`
+              try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { prompt('Share link', url) }
+            }}>{copied ? '✓ copied' : 'share'}</button>
+          )}
           <button className="btn-ghost" onClick={replan} disabled={!!busy}>{trip.plan ? 're-plan' : 'plan'}</button>
           {trip.plan && trip.status !== 'booked' && (
             <button className="btn-primary" onClick={book} disabled={!!busy}>book · {usd(trip.plan.total_usd)}</button>

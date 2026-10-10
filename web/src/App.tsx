@@ -7,6 +7,7 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import NewTrip from './pages/NewTrip'
 import TripView from './pages/TripView'
+import Share from './pages/Share'
 
 function Private({ children }: { children: React.ReactElement }) {
   const { user, loading } = useAuth()
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/share/:id" element={<Share />} />
         <Route path="/app" element={<Private><Dashboard /></Private>} />
         <Route path="/app/new" element={<Private><NewTrip /></Private>} />
         <Route path="/app/trips/:id" element={<Private><TripView /></Private>} />

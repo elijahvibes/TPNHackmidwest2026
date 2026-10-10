@@ -170,6 +170,17 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, plan)
 }
 
+// shareTrip returns a planned trip to anyone holding its id (a UUID), so a
+// plan can be sent to friends or judges without a login.
+func (d *Deps) shareTrip(w http.ResponseWriter, r *http.Request) {
+	t, err := scanTrip(d.DB.QueryRowContext(r.Context(), "SELECT "+tripCols+" FROM trips WHERE id=?", chi.URLParam(r, "id")))
+	if err != nil || t.Plan == nil {
+		httpx.Error(w, 404, "no shared plan at this link")
+		return
+	}
+	httpx.JSON(w, 200, t)
+}
+
 // planPreview is the stateless version used by the landing page.
 func (d *Deps) planPreview(w http.ResponseWriter, r *http.Request) {
 	var req planner.Request

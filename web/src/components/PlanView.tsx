@@ -1,4 +1,5 @@
 import { hrs, usd, type Plan } from '../lib/api'
+import RouteMap from './RouteMap'
 
 const catColor: Record<string, string> = {
   transport: 'text-cyan', lodging: 'text-amber', activity: 'text-accent', food: 'text-rose', stop: 'text-muted',
@@ -55,6 +56,13 @@ export default function PlanView({ plan }: { plan: Plan }) {
           </div>
         ))}
       </section>
+
+      {plan.origin_loc && plan.dest_loc && (
+        <RouteMap
+          origin={plan.origin_loc} dest={plan.dest_loc} stops={plan.stops} activities={plan.activities}
+          originLabel={plan.title.split('→')[0]?.trim() || 'origin'} destLabel={plan.title.split('→')[1]?.trim() || 'destination'}
+        />
+      )}
 
       {/* day by day */}
       <section className="grid gap-3">

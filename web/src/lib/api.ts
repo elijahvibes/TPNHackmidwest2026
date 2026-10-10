@@ -99,6 +99,8 @@ export const api = {
 
   planPreview: (req: PlanRequest) => request<Plan>('POST', '/plan/preview', req),
 
+  share: (id: string) => request<Trip>('GET', `/share/${id}`),
+
   trips: () => request<Trip[]>('GET', '/trips'),
   trip: (id: string) => request<Trip>('GET', `/trips/${id}`),
   createTrip: (t: Omit<PlanRequest, 'origin_loc' | 'vehicle_mpg' | 'interests'> & { title?: string }) =>

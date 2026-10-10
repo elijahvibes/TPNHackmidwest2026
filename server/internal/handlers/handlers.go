@@ -53,6 +53,7 @@ func Mount(r chi.Router, d *Deps) {
 		r.Use(d.requireDB)
 		r.Post("/auth/register", d.register)
 		r.Post("/auth/login", d.login)
+		r.Get("/share/{id}", d.shareTrip) // public read-only plan by unguessable id
 	})
 
 	r.Group(func(r chi.Router) {
