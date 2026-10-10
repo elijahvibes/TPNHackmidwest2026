@@ -4,12 +4,12 @@
 # needs no DNS setup). When a real domain is pointed at the Linode, set
 # SITE_HOST=yourdomain.com in .env and redeploy; Caddy fetches the cert itself.
 
-{$SITE_HOST:50-116-22-198.sslip.io} {
+{$SITE_HOST:172-239-49-30.sslip.io} {
 	encode zstd gzip
 	reverse_proxy app:8080
 }
 
 # Plain HTTP on the bare IP keeps working too.
-http://50.116.22.198 {
+http://172.239.49.30 {
 	reverse_proxy app:8080
 }
