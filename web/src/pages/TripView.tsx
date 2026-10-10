@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api, usd, type Trip } from '../lib/api'
 import PlanView from '../components/PlanView'
 import PlanProgress from '../components/PlanProgress'
+import DataWarning from '../components/DataWarning'
 
 export default function TripView() {
   const { id = '' } = useParams()
@@ -11,9 +12,13 @@ export default function TripView() {
   const [busy, setBusy] = useState('')
   const [receipt, setReceipt] = useState<{ ref: string | null; mock: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
+  const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null)
 
   const load = () => api.trip(id).then(setTrip).catch(e => setErr((e as Error).message))
   useEffect(() => { load() }, [id])
+  useEffect(() => {
+    api.health().then(h => setPaymentsLive(h.payments)).catch(e => setErr((e as Error).message))
+  }, [])
 
   const replan = async (mode?: string) => {
     setBusy(mode ? `re-planning as ${mode}…` : 're-planning…'); setErr('')
@@ -44,6 +49,14 @@ export default function TripView() {
     try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { prompt('Share link', url) }
   }
 
+  const selectFlight = async (index: number, returnToken?: string) => {
+    setBusy('saving flight selection…'); setErr('')
+    try {
+      const plan = await api.selectTripFlight(id, index, returnToken)
+      setTrip(current => current ? { ...current, plan } : current)
+    } finally { setBusy('') }
+  }
+
   if (err && !trip) return <div className="mono text-rose">{err}</div>
   if (!trip) return <div className="mono text-muted">loading…</div>
 
@@ -66,14 +79,20 @@ export default function TripView() {
       </div>
       {planning && <PlanProgress active />}
       {err && <div className="mono text-sm text-rose">error: {err}</div>}
+      <DataWarning details={receipt?.mock
+        ? ['Payment: simulated settlement only. No money was moved and no airline ticket or hotel was reserved.']
+        : paymentsLive === false && trip.status !== 'booked'
+          ? ['Payments: mock mode is enabled. The book button will simulate a payment, not move money or reserve travel.']
+          : []} />
       {receipt && (
         <div className="panel p-4 border-accent mono text-sm">
           <span className="text-accent">✓ payment settled</span> · ref {receipt.ref}
-          {receipt.mock && <span className="text-dim"> · mock mode (set JACKHENRY_BASE_URL to go live)</span>}
+          {receipt.mock && <span className="text-rose font-bold"> · simulated payment, not a real charge</span>}
         </div>
       )}
       {trip.plan ? (
         <PlanView plan={trip.plan} actions={actions} busy={!!busy} onChooseHotel={chooseHotel} onReplan={m => replan(m)}
+          onSelectFlight={selectFlight} disabled={!!busy || trip.status === 'booked'}
           meta={{ travelers: trip.travelers, budget_usd: trip.budget_usd, status: trip.status }} />
       ) : (
         <div className="panel p-8 text-center grid gap-3 justify-items-center">

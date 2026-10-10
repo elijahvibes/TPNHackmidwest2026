@@ -2,6 +2,7 @@ package planner
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -10,14 +11,46 @@ import (
 	"trailmix/internal/travel"
 )
 
-// With no API keys every provider returns mock data, so this exercises the
-// whole pricing + scoring + fallback-itinerary path offline.
+type fixtureSearch struct{}
+
+func (fixtureSearch) Enabled() bool { return true }
+
+func (fixtureSearch) ReturnFlights(context.Context, travel.FlightSearch) ([]travel.FlightQuote, error) {
+	return []travel.FlightQuote{{Carrier: "Return airline", PriceUSD: 300, DurationMin: 180, Source: "serpapi", BookingToken: "booking"}}, nil
+}
+
+func (fixtureSearch) BookingOptions(context.Context, travel.FlightSearch) ([]travel.BookingOption, error) {
+	return nil, nil
+}
+
+func (fixtureSearch) Flights(_ context.Context, origin, dest, depart, ret string, _ int) ([]travel.FlightQuote, error) {
+	return []travel.FlightQuote{{
+		Carrier: "Test airline", Origin: origin, Destination: dest, Depart: depart, Return: ret,
+		PriceUSD: 250, DurationMin: 120, Source: "serpapi",
+	}}, nil
+}
+
+func (fixtureSearch) Hotels(_ context.Context, _ string, _, _ string, nights, _ int) ([]travel.HotelQuote, error) {
+	stay := func(name string, rating, nightly float64, kind string) travel.HotelQuote {
+		return travel.HotelQuote{
+			Name: name, Rating: rating, NightlyUSD: nightly, TotalUSD: float64(nights) * nightly,
+			Nights: nights, Kind: kind, Source: "serpapi",
+		}
+	}
+	return []travel.HotelQuote{
+		stay("Test hotel", 4, 100, "hotel"),
+		stay("Budget inn", 3, 70, "hotel"),
+		stay("Test rental", 4.5, 160, "rental"),
+	}, nil
+}
+
+// Travel search fixtures exercise scoring offline without production mock quotes.
 func newOffline() *Planner {
 	return &Planner{
 		AI:      ai.New("", "", ""),
 		Geo:     travel.NewGeo(""),
 		Fuel:    travel.NewFuel(""),
-		Amadeus: travel.NewAmadeus("", ""),
+		SerpAPI: fixtureSearch{},
 		Places:  travel.NewPlaces(""),
 	}
 }
@@ -53,8 +86,8 @@ func TestPlanOffline(t *testing.T) {
 	if plan.AIGenerated {
 		t.Error("ai_generated should be false with no AI_BASE_URL")
 	}
-	if plan.Sources["flights"] != "mock" || plan.Sources["hotels"] != "mock" {
-		t.Errorf("sources should be mock: %v", plan.Sources)
+	if plan.Sources["flights"] != "serpapi" || plan.Sources["hotels"] != "serpapi" {
+		t.Errorf("sources should identify the travel provider: %v", plan.Sources)
 	}
 	// Options are sorted best value first and the recommendation matches.
 	if plan.Options[0].ValueScore < plan.Options[1].ValueScore {
@@ -219,6 +252,7 @@ func TestPlanUsesBrowserLocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("origin_loc should bypass geocoding: %v", err)
 	}
+
 	if plan.OriginLoc.Lat != 39.0 {
 		t.Errorf("origin loc not used: %+v", plan.OriginLoc)
 	}
@@ -332,5 +366,43 @@ func TestChooseHotelRetotals(t *testing.T) {
 	}
 	if err := plan.ChooseHotel("Nope Hotel", 0); err == nil {
 		t.Error("unknown hotel should error")
+	}
+}
+
+func TestPlanLiveSearchFailure(t *testing.T) {
+	p := newOffline()
+	p.SerpAPI = travel.NewSerpAPI("test-secret")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	plan, err := p.Plan(ctx, Request{
+		Origin: "Kansas City", Destination: "Chicago",
+		StartDate: "2026-11-10", EndDate: "2026-11-13", Travelers: 2,
+	})
+	if plan != nil || !errors.Is(err, travel.ErrProvider) {
+		t.Fatalf("expected no mock plan on live failure, got %v, %v", plan, err)
+	}
+}
+
+func TestPlanLiveRequiresOvernightStay(t *testing.T) {
+	p := newOffline()
+	p.SerpAPI = travel.NewSerpAPI("test-secret")
+	_, err := p.Plan(context.Background(), Request{
+		Origin: "Kansas City", Destination: "Chicago",
+		StartDate: "2026-11-10", EndDate: "2026-11-10", Travelers: 1,
+	})
+	if err == nil || !strings.Contains(err.Error(), "end_date must be after") {
+		t.Fatalf("expected live date validation, got %v", err)
+	}
+}
+
+func TestPlanRequiresSerpAPIKey(t *testing.T) {
+	p := newOffline()
+	p.SerpAPI = travel.NewSerpAPI("")
+	plan, err := p.Plan(context.Background(), Request{
+		Origin: "Kansas City", Destination: "Chicago",
+		StartDate: "2026-11-10", EndDate: "2026-11-13", Travelers: 2,
+	})
+	if plan != nil || !errors.Is(err, travel.ErrProvider) || !strings.Contains(err.Error(), "SERPAPI_KEY") {
+		t.Fatalf("expected missing key error with no plan, got %v, %v", plan, err)
 	}
 }

@@ -74,31 +74,6 @@ func TestNearestAirport(t *testing.T) {
 	}
 }
 
-func TestMockHotelsSitOnTheMap(t *testing.T) {
-	denver := LatLng{39.7392, -104.9903}
-	hs := mockHotels(denver, "Denver, CO", 3, "2026-11-01", "2026-11-04")
-	if len(hs) < 4 {
-		t.Fatalf("want several mock hotels, got %d", len(hs))
-	}
-	for _, h := range hs {
-		if h.Location.Lat == 0 || h.Location.Lng == 0 {
-			t.Errorf("%s has no location", h.Name)
-		}
-		if d := haversineMiles(denver, h.Location) * 1.609; d > h.DistanceKm*1.5+0.5 {
-			t.Errorf("%s drawn %.1f km out but claims %.1f km", h.Name, d, h.DistanceKm)
-		}
-		if h.Area == "" || h.URL == "" || len(h.Amenities) == 0 {
-			t.Errorf("%s missing area/url/amenities: %+v", h.Name, h)
-		}
-		if h.TotalUSD != round2(h.NightlyUSD*3) {
-			t.Errorf("%s total %.2f != 3 × %.2f", h.Name, h.TotalUSD, h.NightlyUSD)
-		}
-	}
-	if hs[0].Name != "The Denver Grand" {
-		t.Errorf("mock names should carry the city: %q", hs[0].Name)
-	}
-}
-
 func TestStateCode(t *testing.T) {
 	if StateCode("Kansas") != "KS" || StateCode("ks") != "KS" || StateCode("Ontario") != "Ontario" {
 		t.Error("StateCode mapping broken")

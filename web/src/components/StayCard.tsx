@@ -33,7 +33,7 @@ export default function StayCard({ hotels, budgetLeft, onChoose, source }: {
     <div className="panel p-4 grid gap-3">
       <div className="flex items-baseline justify-between gap-3">
         <h4 className="label">your stay</h4>
-        <span className={`tag ${source === 'amadeus' ? 'text-cyan' : 'text-dim'}`}>{source === 'amadeus' ? 'live rates · amadeus' : 'sample rates'}</span>
+        <span className={`tag ${source === 'serpapi' ? 'text-cyan' : 'text-dim'}`}>{source === 'serpapi' ? 'live rates · SerpApi' : 'sample rates'}</span>
       </div>
       <div>
         <div className="flex items-start justify-between gap-3">

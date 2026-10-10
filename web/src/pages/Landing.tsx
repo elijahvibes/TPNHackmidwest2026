@@ -30,6 +30,13 @@ export default function Landing() {
     } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
 
+  const selectFlight = async (index: number, returnToken?: string) => {
+    if (!plan) return
+    setBusy(true)
+    try { setPlan(await api.selectPreviewFlight(plan, index, returnToken)) }
+    finally { setBusy(false) }
+  }
+
   return (
     <div className="grid gap-8">
       <section className="pt-4 grid lg:grid-cols-[1.2fr_1fr] gap-8 items-end">
@@ -64,7 +71,7 @@ export default function Landing() {
       {err && <div className="mono text-sm text-rose">error: {err}</div>}
       {plan && (
         <div ref={resultRef} className="grid gap-6 scroll-mt-20">
-          <PlanView plan={plan} meta={{ travelers: req?.travelers, budget_usd: req?.budget_usd ?? null }}
+          <PlanView plan={plan} meta={{ travelers: req?.travelers, budget_usd: req?.budget_usd ?? null }} onSelectFlight={selectFlight} disabled={busy}
             onChooseHotel={name => setPlan(p => p ? chooseHotelLocally(p, name) : p)} />
           {!user && <div className="panel p-4 mono text-sm text-muted">Like it? <Link to="/register" className="text-accent">create an account</Link> to save trips, swap hotels for good, and book with Jack Henry.</div>}
           {user && <div className="panel p-4 mono text-sm text-muted">Save this as a trip from <Link to="/app/new" className="text-accent">+ new</Link>.</div>}

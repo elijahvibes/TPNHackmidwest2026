@@ -84,13 +84,28 @@ type Plan struct {
 	AIGenerated     bool                 `json:"ai_generated"`
 	Sources         map[string]string    `json:"sources"`
 	GeneratedAt     time.Time            `json:"generated_at"`
+	Travelers       int                  `json:"travelers"`
+	BudgetUSD       float64              `json:"budget_usd"`
+	SelectedFlight  int                  `json:"selected_flight"`
+	SelectedReturn  *travel.FlightQuote  `json:"selected_return,omitempty"`
+	FlightSelected  bool                 `json:"flight_selected"`
+	OriginName      string               `json:"origin_name"`
+	DestinationName string               `json:"destination_name"`
+}
+
+type TravelSearch interface {
+	Enabled() bool
+	Flights(context.Context, string, string, string, string, int) ([]travel.FlightQuote, error)
+	Hotels(context.Context, string, string, string, int, int) ([]travel.HotelQuote, error)
+	ReturnFlights(context.Context, travel.FlightSearch) ([]travel.FlightQuote, error)
+	BookingOptions(context.Context, travel.FlightSearch) ([]travel.BookingOption, error)
 }
 
 type Planner struct {
 	AI      *ai.Client
 	Geo     *travel.Geo
 	Fuel    *travel.Fuel
-	Amadeus *travel.Amadeus
+	SerpAPI TravelSearch
 	Places  *travel.Places
 	Weather *travel.NWS // nil = mock forecast (tests)
 }
@@ -109,7 +124,10 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	}
 	nights := int(end.Sub(start).Hours() / 24)
 	if nights < 1 {
-		nights = 1
+		return nil, fmt.Errorf("end_date must be after start_date for hotel searches")
+	}
+	if !p.SerpAPI.Enabled() {
+		return nil, fmt.Errorf("%w: SERPAPI_KEY is required for flight and hotel searches", travel.ErrProvider)
 	}
 
 	// 1. Where are we going? Any city works: a pinned point from the form
@@ -124,20 +142,26 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	}
 	origin, dest := originPlace.LatLng, destPlace.LatLng
 
-	// 2. Gather prices. Each call tolerates missing keys.
+	// 2. Gather prices. Flight and hotel searches require the configured provider.
 	miles, minutes, routeSrc := p.Geo.Route(ctx, origin, dest)
 	drive := p.Fuel.Drive(ctx, miles, minutes, req.VehicleMPG)
-	// Flights go from the nearest real airport to each place, so a town with
-	// no airport still gets a fare (plus the drive to the terminal).
+	// Flights go from the nearest real airport to each place (SerpApi needs IATA
+	// codes), so a town with no airport still gets a fare plus the drive to the terminal.
 	var flights []travel.FlightQuote
 	var originAirport, destAirport *travel.Airport
 	if oa, ok := travel.NearestAirport(origin); ok {
 		if da, ok := travel.NearestAirport(dest); ok && oa.Code != da.Code {
 			originAirport, destAirport = &oa, &da
-			flights = p.Amadeus.Flights(ctx, oa.Code, da.Code, req.StartDate, req.EndDate, req.Travelers)
+			flights, err = p.SerpAPI.Flights(ctx, oa.Code, da.Code, req.StartDate, req.EndDate, req.Travelers)
+			if err != nil {
+				return nil, fmt.Errorf("flight search: %w", err)
+			}
 		}
 	}
-	hotels := p.Amadeus.Hotels(ctx, dest, req.StartDate, req.EndDate, nights, destPlace.Label)
+	hotels, err := p.SerpAPI.Hotels(ctx, destPlace.Label, req.StartDate, req.EndDate, nights, req.Travelers)
+	if err != nil {
+		return nil, fmt.Errorf("hotel search: %w", err)
+	}
 	activities := p.activitiesFor(ctx, dest, req.Interests)
 	food := p.Places.Nearby(ctx, dest, "food", 4)
 	var stops []travel.Place
@@ -154,7 +178,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	weather := p.Weather.Forecast(ctx, dest, destPlace.Label, req.StartDate, req.EndDate)
 	safety := travel.SafetyFor(ctx, destPlace.Name+", "+destPlace.Region)
 
-	sort.Slice(flights, func(i, j int) bool { return flights[i].PriceUSD < flights[j].PriceUSD })
+	travel.RankFlights(flights)
 	sort.Slice(hotels, func(i, j int) bool {
 		// value = rating per dollar
 		return hotels[i].Rating/hotels[i].NightlyUSD > hotels[j].Rating/hotels[j].NightlyUSD
@@ -173,8 +197,10 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	// Hotel choice honors the budget: the best-rated stay that still fits after
 	// the cheapest transport and activities; otherwise the cheapest stay.
 	minTransport := drive.RoundTripUSD
-	if len(flights) > 0 && flights[0].PriceUSD*float64(req.Travelers) < minTransport {
-		minTransport = flights[0].PriceUSD * float64(req.Travelers)
+	for _, f := range flights {
+		if cost := f.PriceUSD * float64(req.Travelers); cost < minTransport {
+			minTransport = cost
+		}
 	}
 	hotels = pickHotel(hotels, req.BudgetUSD-minTransport-actCost, safety.Level == "elevated")
 	lodging := 0.0
@@ -267,13 +293,15 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 		DestAirport:     destAirport,
 		Sources: map[string]string{
 			"route": routeSrc, "gas": drive.Source, "geocode": destPlace.Source,
-			"flights": sourceOf(len(flights) > 0 && flights[0].Source == "amadeus", "amadeus"),
-			"hotels":  sourceOf(len(hotels) > 0 && hotels[0].Source == "amadeus", "amadeus"),
+			"flights": "serpapi",
+			"hotels":  "serpapi",
 			"places":  sourceOf(len(activities) > 0 && activities[0].Source == "google", "google"),
 		},
 		Weather:     weather,
 		Safety:      safety,
 		GeneratedAt: time.Now(),
+		Travelers:   req.Travelers, BudgetUSD: req.BudgetUSD,
+		OriginName: req.Origin, DestinationName: req.Destination,
 	}
 	plan.Sources["weather"] = weather.Source
 	plan.Sources["safety"] = "fbi-ucr"
@@ -549,11 +577,16 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 				for _, s := range plan.Stops[:min(2, len(plan.Stops))] {
 					d.Items = append(d.Items, DayItem{Time: "11:30", Title: s.Name, Detail: s.Note, CostUSD: s.PriceUSD, Category: "stop"})
 				}
-			} else if f := first(plan.Flights); f != nil {
+			} else if len(plan.Flights) > 0 {
+				f := plan.Flights[plan.SelectedFlight]
+				price := f.PriceUSD
+				if plan.SelectedReturn != nil {
+					price = plan.SelectedReturn.PriceUSD
+				}
 				if a := plan.OriginAirport; a != nil && a.DistanceMiles > 20 {
 					d.Items = append(d.Items, DayItem{Time: "07:00", Title: fmt.Sprintf("Drive to %s (%s)", a.Code, a.Name), Detail: fmt.Sprintf("%.0f mi from %s", a.DistanceMiles, plan.OriginPlace.Name), CostUSD: 0, Category: "transport"})
 				}
-				d.Items = append(d.Items, DayItem{Time: "09:00", Title: fmt.Sprintf("Fly %s → %s on %s", f.Origin, f.Destination, f.Carrier), Detail: fmt.Sprintf("round trip, %d traveler(s), %s", req.Travelers, stopsLabel(f.Stops)), CostUSD: f.PriceUSD * float64(req.Travelers), Category: "transport"})
+				d.Items = append(d.Items, DayItem{Time: "09:00", Title: fmt.Sprintf("Fly %s → %s on %s", f.Origin, f.Destination, f.Carrier), Detail: fmt.Sprintf("round trip, %d traveler(s), %s", req.Travelers, stopsLabel(f.Stops)), CostUSD: price * float64(req.Travelers), Category: "transport"})
 				if a := plan.DestAirport; a != nil && a.DistanceMiles > 20 {
 					d.Items = append(d.Items, DayItem{Time: "13:00", Title: fmt.Sprintf("%s → %s", a.Code, plan.DestPlace.Name), Detail: fmt.Sprintf("%.0f mi by rental car or rideshare", a.DistanceMiles), CostUSD: 0, Category: "transport"})
 				}
@@ -578,7 +611,11 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 				if a := plan.OriginAirport; a != nil {
 					home = a.Code + ", then home to " + plan.OriginPlace.Name
 				}
-				d.Items = append(d.Items, DayItem{Time: "12:00", Title: "Fly back to " + home, Detail: "return flight already included", CostUSD: 0, Category: "transport"})
+				detail := "return fare included; return flight not yet selected"
+				if plan.SelectedReturn != nil {
+					detail = fmt.Sprintf("%s, %s; fare already included", plan.SelectedReturn.Carrier, plan.SelectedReturn.DepartureTime)
+				}
+				d.Items = append(d.Items, DayItem{Time: "12:00", Title: "Fly back to " + home, Detail: detail, CostUSD: 0, Category: "transport"})
 			}
 		default:
 			d.Theme = "Explore " + plan.DestPlace.Name
@@ -596,7 +633,7 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 				// Late items get a safety nudge; the AI path gets the same instruction in its prompt.
 				d.Items = append(d.Items, DayItem{Time: "21:30", Title: "Evening out near the hotel", Detail: "rideshare back after 10pm (safety: elevated)", CostUSD: 0, Category: "activity"})
 			}
-			if len(plan.Food) > i%len(plan.Food) {
+			if len(plan.Food) > 0 {
 				f := plan.Food[i%len(plan.Food)]
 				d.Items = append(d.Items, DayItem{Time: "18:30", Title: "Dinner at " + f.Name, Detail: f.Note, CostUSD: f.PriceUSD * float64(req.Travelers), Category: "food"})
 			}

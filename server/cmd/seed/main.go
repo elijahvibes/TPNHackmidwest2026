@@ -58,7 +58,7 @@ func main() {
 		AI:      ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel),
 		Geo:     travel.NewGeo(cfg.MapboxToken),
 		Fuel:    fuel,
-		Amadeus: travel.NewAmadeus(cfg.AmadeusKey, cfg.AmadeusSecret),
+		SerpAPI: travel.NewSerpAPI(cfg.SerpAPIKey),
 		Places:  travel.NewPlaces(cfg.PlacesKey),
 		Weather: travel.NewNWS(),
 	}

@@ -5,6 +5,9 @@ import StayCard from './StayCard'
 import CostBreakdown from './CostBreakdown'
 import RouteMap from './RouteMap'
 import { SafetyCard, WeatherStrip } from './WeatherSafety'
+import FlightChooser from './FlightChooser'
+import DataWarning from './DataWarning'
+import { planDataWarnings, planRealData } from '../lib/dataWarnings'
 
 export type PlanMeta = { travelers?: number; budget_usd?: number | null; status?: string }
 
@@ -15,14 +18,17 @@ const MODE_ICON: Record<string, string> = { drive: '🚗', fly: '✈' }
  * rail carries the stay, the money, the map and the conditions. Everything
  * else (the raw lists, the data sources) sits below the fold.
  */
-export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan, busy }: {
+export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan, onSelectFlight, disabled, busy }: {
   plan: Plan
   meta?: PlanMeta
   actions?: ReactNode
   onChooseHotel?: (name: string) => Promise<void> | void
   onReplan?: (mode: string) => void
+  onSelectFlight?: (index: number, returnToken?: string) => Promise<void>
+  disabled?: boolean
   busy?: boolean
 }) {
+  const realData = planRealData(plan)
   const rec = plan.options.find(o => o.mode === plan.recommended_mode) ?? plan.options[0]
   const first = plan.days[0]?.date, last = plan.days[plan.days.length - 1]?.date
   const budget = meta?.budget_usd ?? undefined
@@ -32,6 +38,21 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
 
   return (
     <div className="grid gap-6">
+      <DataWarning details={planDataWarnings(plan)} />
+      <section aria-label="Real provider data" className="rounded-lg border-2 border-accent bg-accent/5 p-5 print:hidden">
+        <h2 className="mono text-xl font-bold text-accent">REAL PROVIDER DATA USED IN THIS PLAN</h2>
+        {realData.length > 0 ? (
+          <ul className="mt-3 list-disc pl-5 grid gap-1 text-sm">
+            {realData.map(detail => <li key={detail}>{detail}</li>)}
+          </ul>
+        ) : (
+          <p className="mt-2 text-muted">No real provider results are identified in this plan.</p>
+        )}
+        <p className="mt-3 text-xs text-muted">
+          Based on the sources recorded when this plan was generated, not a new availability check.
+          Saved results may be out of date. Real search prices are not guaranteed booking quotes.
+        </p>
+      </section>
       <header className="panel p-5 print:border-0 print:p-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -69,10 +90,14 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
             <span key={k} className="tag">{k}: <span className={['mock', 'fallback', 'estimate'].includes(v) ? 'text-dim' : 'text-cyan'}>{v}</span></span>
           ))}
         </div>
+        {(plan.sources.flights === 'serpapi' || plan.sources.hotels === 'serpapi') && (
+          <p className="text-dim text-xs mt-3">Flight and stay prices are Google Travel search results via SerpApi, not guaranteed booking quotes. Optional fees and final checkout prices may differ.</p>
+        )}
       </header>
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
         <div className="grid gap-6 min-w-0">
+          {onSelectFlight && <FlightChooser key={plan.generated_at} plan={plan} onSelect={onSelectFlight} disabled={disabled || busy} />}
           <Itinerary plan={plan} />
           <Explore plan={plan} />
         </div>

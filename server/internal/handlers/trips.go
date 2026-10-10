@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -194,7 +195,7 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 	}
 	plan, err := d.Planner.Plan(r.Context(), req)
 	if err != nil {
-		httpx.Error(w, 400, err.Error())
+		planError(w, err)
 		return
 	}
 	raw, _ := json.Marshal(plan)
@@ -283,10 +284,18 @@ func (d *Deps) planPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	plan, err := d.Planner.Plan(r.Context(), req)
 	if err != nil {
-		httpx.Error(w, 400, err.Error())
+		planError(w, err)
 		return
 	}
 	httpx.JSON(w, 200, plan)
+}
+
+func planError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	if errors.Is(err, travel.ErrProvider) {
+		status = http.StatusBadGateway
+	}
+	httpx.Error(w, status, err.Error())
 }
 
 // vehicleMPG: GET /api/vehicles/mpg?year=2019&make=Honda&model=Civic

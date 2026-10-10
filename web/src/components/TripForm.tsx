@@ -170,7 +170,7 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'plan it', defa
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-        <span className="mono text-[11px] text-dim">any US city or park works · flights priced from the nearest airport · live prices where keys are set</span>
+        <span className="mono text-[11px] text-dim">any US city or park works · flights priced from the nearest airport · live flight &amp; hotel search; other costs may be estimates</span>
         <button className="btn-primary" disabled={busy || !!dateErr}>{busy ? 'planning…' : submitLabel} →</button>
       </div>
     </form>

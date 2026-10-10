@@ -40,13 +40,17 @@ func Mount(r chi.Router, d *Deps) {
 			"ok":       true,
 			"db":       d.DB != nil,
 			"ai":       d.Planner.AI.Enabled(),
-			"amadeus":  d.Planner.Amadeus.Enabled(),
+			"serpapi":  d.Planner.SerpAPI.Enabled(),
 			"payments": d.Payments.Live(),
 		})
 	})
 
 	// No login needed: the landing-page demo uses all of these.
 	r.Post("/plan/preview", d.planPreview)
+	r.Post("/plan/flight", d.selectPreviewFlight)
+	r.Post("/flights/returns", d.returnFlights)
+	r.Post("/flights/bookings", d.flightBookings)
+	r.Post("/flights/booking-redirect", resolveFlightBooking)
 	r.Get("/vehicles/mpg", d.vehicleMPG)
 	r.Get("/geo/suggest", d.geoSuggest) // city autocomplete (any city, not just the demo list)
 
@@ -68,6 +72,7 @@ func Mount(r chi.Router, d *Deps) {
 		r.Delete("/trips/{id}", d.deleteTrip)
 		r.Post("/trips/{id}/plan", d.planTrip)
 		r.Post("/trips/{id}/hotel", d.chooseHotel) // swap the stay, re-total the plan
+		r.Post("/trips/{id}/flight", d.selectTripFlight)
 
 		r.Get("/payments", d.listPayments)
 		r.Post("/payments", d.createPayment)
