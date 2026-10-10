@@ -12,6 +12,18 @@
       "runtimeExecutable": "go",
       "runtimeArgs": ["-C", "server", "run", "./cmd/api"],
       "port": 8080
+    },
+    {
+      "name": "api2",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set PORT=8081&& set CORS_ORIGIN=http://localhost:5174&& go -C server run ./cmd/api"],
+      "port": 8081
+    },
+    {
+      "name": "web2",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set API_PORT=8081&& npm --prefix web run dev -- --port 5174 --strictPort"],
+      "port": 5174
     }
   ]
 }

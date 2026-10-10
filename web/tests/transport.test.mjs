@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { destinationTransport, roadStops, showTransportItem } from '../src/lib/transport.ts'
-import { planDataWarnings, planRealData } from '../src/lib/dataWarnings.ts'
+import { planDataWarnings, planEstimates, planRealData } from '../src/lib/dataWarnings.ts'
 
 test('driving brings an own car; flying preserves requested rental', () => {
   assert.equal(destinationTransport({recommended_mode: 'drive', local_transport: 'rental_car'}), 'own car')
@@ -37,6 +37,7 @@ test('driving disclosures do not suggest renting another car', () => {
     drive: {source: 'eia'}, flights: [], hotels: [], activities: [], food: [],
     stops: [], ai_generated: true,
   }
-  assert.ok(planDataWarnings(plan).some(w => w.includes('parking and local fuel')))
-  assert.ok(!planDataWarnings(plan).some(w => w.includes('rental')))
+  assert.ok(planEstimates(plan).some(w => w.includes('parking and local fuel')))
+  assert.ok(!planEstimates(plan).some(w => w.includes('rental')))
+  assert.deepEqual(planDataWarnings(plan), [])
 })

@@ -81,7 +81,7 @@ func Load() Config {
 		CORSOrigin:       env("CORS_ORIGIN", "http://localhost:5173"),
 		AIBaseURL:        env("AI_BASE_URL", ""),
 		AIAPIKey:         env("AI_API_KEY", ""),
-		AIModel:          env("AI_MODEL", "llama-3.1-8b-instruct"),
+		AIModel:          env("AI_MODEL", "hackathon-chat"),
 		SerpAPIKey:       env("SERPAPI_KEY", ""),
 		EIAKey:           env("EIA_KEY", ""),
 		PlacesKey:        env("GOOGLE_PLACES_KEY", ""),

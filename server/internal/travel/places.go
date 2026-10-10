@@ -17,6 +17,8 @@ type Places struct {
 	key      string
 	http     *http.Client
 	geoapify *Geoapify
+	osm      bool   // real-data-only mode: Geoapify, Google, then OpenStreetMap, never mock
+	ranker   Ranker // optional AI that picks among real OSM candidates
 }
 
 func NewPlacesWithGeoapify(googleKey, geoapifyKey string) *Places {
@@ -28,7 +30,7 @@ func NewPlacesWithGeoapify(googleKey, geoapifyKey string) *Places {
 }
 
 func NewPlaces(key string) *Places {
-	return &Places{key: key, http: &http.Client{Timeout: 15 * time.Second}}
+	return &Places{key: key, http: &http.Client{Timeout: 25 * time.Second}}
 }
 
 // Nearby returns up to limit places of the given kind near a point.
@@ -37,20 +39,26 @@ func (p *Places) Nearby(ctx context.Context, at LatLng, kind string, limit int) 
 	if p.geoapify != nil {
 		places, err := p.geoapify.Nearby(ctx, at, kind, limit)
 		if err == nil {
+			return places // a real empty answer stays empty
+		}
+		log.Printf("places: %v", err)
+		if !p.osm {
+			log.Printf("places: using labeled mock results")
+			places = mockPlaces(at, kind, limit)
+			for i := range places {
+				places[i].Note = "Geoapify unavailable; mock place, not a real recommendation"
+			}
 			return places
 		}
-
-		log.Printf("places: %v; using labeled mock results", err)
-		places = mockPlaces(at, kind, limit)
-		for i := range places {
-			places[i].Note = "Geoapify unavailable; mock place, not a real recommendation"
-		}
-		return places
+		// real-data mode: fall through to Google / OpenStreetMap
 	}
 	if p.key != "" {
 		if res := p.google(ctx, at, kind, limit); len(res) > 0 {
 			return res
 		}
+	}
+	if p.osm {
+		return p.openStreetMap(ctx, at, kind, limit) // may be empty; never fabricated
 	}
 	return mockPlaces(at, kind, limit)
 }
@@ -60,8 +68,7 @@ func (p *Places) Explore(ctx context.Context, at LatLng, kind string, limit int,
 		log.Printf("places: invalid exploration coordinates, radius or result limit")
 		return nil
 	}
-	if p.geoapify == nil {
-		places := p.Nearby(ctx, at, kind, limit)
+	within := func(places []Place) []Place {
 		out := make([]Place, 0, len(places))
 		for _, place := range places {
 			if haversineMiles(at, place.Location) <= miles {
@@ -70,9 +77,17 @@ func (p *Places) Explore(ctx context.Context, at LatLng, kind string, limit int,
 		}
 		return out
 	}
+	if p.geoapify == nil {
+		return within(p.Nearby(ctx, at, kind, limit))
+	}
 	places, err := p.geoapify.Explore(ctx, at, kind, limit, miles*1609.34)
 	if err != nil {
-		log.Printf("places: %v; using labeled mock exploration results", err)
+		log.Printf("places: %v", err)
+		if p.osm {
+			// real-data mode: Google / OpenStreetMap instead of mock
+			return within(p.Nearby(ctx, at, kind, limit))
+		}
+		log.Printf("places: using labeled mock exploration results")
 		places = mockPlaces(at, kind, limit)
 		for i := range places {
 			places[i].Note = "Geoapify unavailable; mock place, not a real recommendation"

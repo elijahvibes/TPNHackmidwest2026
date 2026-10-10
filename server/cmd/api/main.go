@@ -38,16 +38,17 @@ func main() {
 	}
 
 	fuel := travel.NewFuel(cfg.EIAKey)
+	aiClient := ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel)
 	deps := &handlers.Deps{
 		DB:   pool,
 		Auth: auth.New(cfg.JWTSecret),
 		Fuel: fuel,
 		Planner: &planner.Planner{
-			AI:      ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel),
+			AI:      aiClient,
 			Geo:     travel.NewGeo(cfg.MapboxToken),
 			Fuel:    fuel,
 			SerpAPI: travel.NewSerpAPI(cfg.SerpAPIKey),
-			Places:  travel.NewPlacesWithGeoapify(cfg.PlacesKey, cfg.GeoapifyKey),
+			Places:  travel.NewPlacesWithGeoapify(cfg.PlacesKey, cfg.GeoapifyKey).EnableOSM(aiClient),
 			Weather: travel.NewNWS(),
 		},
 		Payments: payments.NewJackHenry(cfg.JackHenryBaseURL, cfg.JackHenryKey),
@@ -55,7 +56,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
-	r.Use(middleware.Timeout(120 * time.Second))
+	r.Use(middleware.Timeout(300 * time.Second))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   strings.Split(cfg.CORSOrigin, ","),
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},

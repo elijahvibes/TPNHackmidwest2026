@@ -54,12 +54,13 @@ func main() {
 	}
 
 	fuel := travel.NewFuel(cfg.EIAKey)
+	aiClient := ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel)
 	p := &planner.Planner{
-		AI:      ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel),
+		AI:      aiClient,
 		Geo:     travel.NewGeo(cfg.MapboxToken),
 		Fuel:    fuel,
 		SerpAPI: travel.NewSerpAPI(cfg.SerpAPIKey),
-		Places:  travel.NewPlacesWithGeoapify(cfg.PlacesKey, cfg.GeoapifyKey),
+		Places:  travel.NewPlacesWithGeoapify(cfg.PlacesKey, cfg.GeoapifyKey).EnableOSM(aiClient),
 		Weather: travel.NewNWS(),
 	}
 

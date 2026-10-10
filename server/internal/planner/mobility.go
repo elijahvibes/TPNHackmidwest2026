@@ -32,13 +32,19 @@ func normalizeMobility(req *Request) error {
 }
 
 func effectiveTransport(plan *Plan) string {
-	if plan.RecommendedMode == "drive" && (plan.LocalTransport == "auto" || plan.LocalTransport == "" || plan.LocalTransport == "rental_car") {
+	return transportFor(plan.RecommendedMode, plan.LocalTransport)
+}
+
+// transportFor resolves the requested local transport against the trip mode:
+// driving in means the traveler has their own car at the destination.
+func transportFor(mode, local string) string {
+	if mode == "drive" && (local == "auto" || local == "" || local == "rental_car") {
 		return "own car"
 	}
-	if plan.LocalTransport == "" || plan.LocalTransport == "auto" {
+	if local == "" || local == "auto" {
 		return "transit/rideshare"
 	}
-	switch plan.LocalTransport {
+	switch local {
 	case "rental_car":
 		return "rental car"
 	case "walking":
@@ -58,7 +64,7 @@ func mobilityNote(plan *Plan) string {
 	case "walking":
 		costs = "any additional transfers"
 	}
-	note := fmt.Sprintf(" Explore within %.0f miles of the destination using %s. Local transport costs (%s) are not included; routes and availability are not verified.",
+	note := fmt.Sprintf(" Explore within %.0f miles of the destination using %s; %s are included as an estimate, and routes and availability are not verified.",
 		plan.ActivityRadiusMiles, effectiveTransport(plan), costs)
 	if plan.LocalTransport == "walking" && plan.ActivityRadiusMiles > 3 {
 		note += " Your range exceeds a typical walking area; distant activities need additional transportation."

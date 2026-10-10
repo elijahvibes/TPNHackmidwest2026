@@ -179,7 +179,7 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'plan it', defa
         </div>
         <p className="text-xs text-muted sm:col-span-2">
           City and out-of-city activities within your range. This is straight-line distance, not travel time.
-          Local transport costs are not included. {v.local_transport === 'walking' && (v.activity_radius_miles ?? 0) > 3
+          Getting-around costs are estimated per day and included in the total. {v.local_transport === 'walking' && (v.activity_radius_miles ?? 0) > 3
             && 'This range may require additional transportation beyond walking.'}
         </p>
       </div>
@@ -200,7 +200,7 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'plan it', defa
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-        <span className="mono text-[11px] text-dim">any US city or park works · flights priced from the nearest airport · live flight &amp; hotel search; other costs may be estimates</span>
+        <span className="mono text-[11px] text-dim">any US city or park works · flights priced from the nearest airport · live flight, hotel, gas, route and crime data; place prices marked ~ are estimates</span>
         <button className="btn-primary" disabled={busy || !!dateErr}>{busy ? 'planning…' : submitLabel} →</button>
       </div>
     </form>

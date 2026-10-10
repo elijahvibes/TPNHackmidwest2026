@@ -35,9 +35,9 @@ export default function Payments() {
         {live === false && <span className="tag text-amber">mock mode · set JACKHENRY_BASE_URL</span>}
       </div>
       <DataWarning details={[
-        ...(live === false ? ['Payments: mock mode is enabled. New payments are simulated; no money is moved.'] : []),
+        ...(live === false ? ['Payments: mock mode is on. New payments are simulated and no money moves.'] : []),
         ...((rows ?? []).some(r => isMockPayment(r.provider_ref))
-          ? ['Payment history: entries marked MOCK are simulated settlements, not real charges. The settled total includes these mock payments.'] : []),
+          ? ['Payment history: entries marked MOCK are simulated settlements. The settled total counts them.'] : []),
       ]} />
       {err && <div className="mono text-sm text-rose">{err}</div>}
       {rows === null ? <div className="mono text-muted">loading…</div> : rows.length === 0 ? (

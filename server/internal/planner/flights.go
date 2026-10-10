@@ -67,11 +67,11 @@ func (p *Planner) SelectFlight(ctx context.Context, plan *Plan, index int, retur
 		found = true
 		o.TransportUSD = round2(price * float64(plan.Travelers))
 		o.TravelHours = round1(duration)
-		o.TotalUSD = round2(o.TransportUSD + o.LodgingUSD + o.ActivitiesUSD)
+		o.TotalUSD = round2(o.TransportUSD + o.LodgingUSD + o.ActivitiesUSD + o.LocalUSD)
 		o.ValueScore = valueScore(*o, plan.Nights)
 		o.Why = fmt.Sprintf("%s round trip from $%.2f/person, %d outbound stop(s)", f.Carrier, price, f.Stops)
 		factors := []string{
-			fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", o.TotalUSD/float64(plan.Nights)),
+			fmt.Sprintf("$%.0f per night all-in (estimates included)", o.TotalUSD/float64(plan.Nights)),
 			fmt.Sprintf("%.1f h door to door round trip incl. airport time", o.TravelHours),
 			fmt.Sprintf("$%.0f/person × %d = $%.0f airfare", price, plan.Travelers, o.TransportUSD),
 		}

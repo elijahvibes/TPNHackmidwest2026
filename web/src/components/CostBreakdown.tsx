@@ -16,9 +16,12 @@ export default function CostBreakdown({ plan, budget, onReplan, busy }: {
     { k: 'transport', v: rec.transport_usd, c: 'var(--color-cyan)' },
     { k: 'lodging', v: rec.lodging_usd, c: 'var(--color-rose)' },
     { k: 'things to do & food', v: rec.activities_usd, c: 'var(--color-accent)' },
+    ...(rec.local_usd ? [{ k: 'getting around ~', v: rec.local_usd, c: 'var(--color-amber)' }] : []),
   ]
   const over = budget ? rec.total_usd - budget : 0
-  const unknownCosts = !!plan.local_transport || [...plan.activities, ...plan.food, ...roadStops(plan)].some(p => p.price_unknown)
+  const places = [...plan.activities, ...plan.food, ...roadStops(plan)]
+  const unknownCosts = places.some(p => p.price_unknown)
+  const estimated = !!rec.local_usd || places.some(p => p.price_estimated)
   return (
     <div className="panel p-4 grid gap-4">
       <div>
@@ -32,12 +35,13 @@ export default function CostBreakdown({ plan, budget, onReplan, busy }: {
           {seg.map(s => <div key={s.k} style={{ width: `${(s.v / cap) * 100}%`, background: s.c }} title={`${s.k}: ${usd(s.v)}`} />)}
         </div>
         {budget && budget < cap ? <div className="relative h-2"><span className="absolute top-0 w-px h-2 bg-ink" style={{ left: `${(budget / cap) * 100}%` }} title="budget" /></div> : null}
-        <dl className="mono text-xs grid grid-cols-3 gap-2 mt-2">
+        <dl className={`mono text-xs grid ${seg.length > 3 ? 'grid-cols-2' : 'grid-cols-3'} gap-2 mt-2`}>
           {seg.map(s => (
             <div key={s.k}><dt className="text-dim flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm" style={{ background: s.c }} />{s.k}</dt><dd className="text-ink">{usd(s.v)}</dd></div>
           ))}
         </dl>
-        {unknownCosts && <p className="text-xs text-muted mt-2">Priced subtotal only. Unknown place costs and local transportation are excluded; budget status is before those costs.</p>}
+        {estimated && <p className="text-xs text-muted mt-2">Flights, stay and gas are live prices. Place prices marked ~ and getting around are typical-price estimates, included so the total is all-in.</p>}
+        {unknownCosts && <p className="text-xs text-muted mt-1">Some places have no price and count as $0.</p>}
       </div>
 
       <div className="grid gap-2">
