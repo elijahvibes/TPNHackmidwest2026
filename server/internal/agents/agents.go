@@ -293,7 +293,8 @@ func Critique(ctx context.Context, c Chat, trip Trip, itinerary any) Report {
 		rep.Status, rep.Summary = "skipped", "no model configured"
 		return rep
 	}
-	system := `You are the Reviewer agent for a trip planner. Read the itinerary as a skeptical, experienced traveler and list concrete problems only. Reply with JSON only: {"verdict":"good|fixable|poor","issues":[string]} with at most 5 issues, each one sentence naming the day and the item. Look for: outdoor plans on rainy days, impossible timing (an activity after the trip home, two far-apart places an hour apart), repeated places, a day with nothing to do, safety advice ignored when safety_level is "elevated", and anything that contradicts the weather or the traveler's interests. Do not comment on prices. If nothing is wrong, return an empty issues list.`
+	system := `You are the Reviewer agent for a trip planner. Read the itinerary as a skeptical, experienced traveler and list concrete problems only. Reply with JSON only: {"verdict":"good|fixable|poor","issues":[string]} with at most 5 issues, each one sentence naming the day and the item. Look for: outdoor plans on rainy days, two far-apart places scheduled an hour apart, repeated places, a day with nothing to do, safety advice ignored when safety_level is "elevated", and anything that contradicts the weather or the traveler's interests.
+Already guaranteed by the system, so NOT issues: arrival-day items are scheduled after the computed arrival time; dinner is in the evening; last-day items end before the trip home with airport lead time; opening hours and transit availability are unverified by design (the plan says so); prices. Do not report any of those. If nothing else is wrong, verdict is "good" with an empty issues list.`
 	tripJSON, _ := json.Marshal(trip)
 	itinJSON, _ := json.Marshal(itinerary)
 	var out struct {
