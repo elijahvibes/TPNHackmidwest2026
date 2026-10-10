@@ -56,19 +56,24 @@ Open http://localhost:5173. Vite proxies `/api` to the Go server on :8080.
 | GET | `/api/health` | no | which integrations are live |
 | POST | `/api/auth/register` `/login` | no | returns a JWT |
 | GET/PATCH | `/api/auth/me` | yes | profile; PATCH stores home geolocation |
-| GET | `/api/vehicles/mpg?year&make&model` | yes | combined MPG from fueleconomy.gov |
+| GET | `/api/vehicles/mpg?year&make&model` | no | combined MPG from fueleconomy.gov |
+| GET | `/api/geo/suggest?q=law` | no | city / town / park autocomplete (any place, US first) |
 | POST | `/api/plan/preview` | no | price + plan a trip without saving (landing page demo) |
 | GET/POST | `/api/trips` | yes | list / create |
 | GET/DELETE | `/api/trips/{id}` | yes | one trip |
-| POST | `/api/trips/{id}/plan` | yes | run the planner, store the itinerary |
+| POST | `/api/trips/{id}/plan` | yes | run the planner, store the itinerary; body may carry `mode`, `origin_loc`, `dest_loc`, `vehicle_mpg`, `interests` |
+| POST | `/api/trips/{id}/hotel` | yes | `{"name"}` swaps the stay and re-totals the stored plan |
 | GET/POST | `/api/payments` | yes | Jack Henry charge; marks the trip `booked` |
 
 ## How the planner works (`server/internal/planner`)
 
-1. Geocode origin and destination (browser GPS, built-in gazetteer, or Mapbox).
+1. Resolve origin and destination. Any city works: a point pinned by the form's autocomplete or
+   browser GPS wins; otherwise the name goes through the built-in gazetteer (~300 US cities and parks,
+   offline), then Mapbox when `MAPBOX_TOKEN` is set, then Photon/Nominatim (OpenStreetMap, no key).
 2. Fetch in parallel-friendly steps: driving route + gas cost (EIA price × your car's MPG), round-trip
-   flights (Amadeus), hotels near the destination (Amadeus), attractions and food (Google Places),
-   rest stops interpolated along the route.
+   flights (Amadeus) between the **nearest major airports** to each place (the drive to the terminal
+   counts toward door-to-door time), hotels near the destination itself (Amadeus; mocks are placed on
+   the map too), attractions and food (Google Places), rest stops interpolated along the route.
 3. Score `drive` vs `fly`: `value = 10000 / (cost per night + 50) − 0.6 × travel hours`.
 4. Hand the real numbers to the LLM on Akamai and ask for a day-by-day JSON itinerary.
    Prices are never invented by the model; it only arranges what was fetched.
@@ -88,8 +93,8 @@ docker compose --profile prod up -d --build
 ```
 
 That builds the UI, compiles the Go binary, and serves both behind Caddy with automatic HTTPS at
-`https://50-116-22-198.sslip.io` (an `sslip.io` name resolves to the IP it encodes, so no DNS setup).
-Plain `http://50.116.22.198` keeps working. For a real domain: point its A record at the Linode,
+`https://172-239-49-30.sslip.io` (an `sslip.io` name resolves to the IP it encodes, so no DNS setup).
+Plain `http://172.239.49.30` keeps working. For a real domain: point its A record at the Linode,
 set `SITE_HOST=yourdomain.com` in `.env`, redeploy; Caddy fetches the certificate itself.
 
 The database is the Akamai Managed MySQL; the Linode must be in the same region/VLAN for the

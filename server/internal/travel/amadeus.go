@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -125,34 +126,59 @@ func (a *Amadeus) Flights(ctx context.Context, originIATA, destIATA, depart, ret
 	return mockFlights(originIATA, destIATA, depart, ret)
 }
 
-// Hotels lists hotel offers near a point. Falls back to mock quotes.
+// Hotels lists hotel offers near a point (the city the user asked for, not
+// its airport). Falls back to mock quotes that are still placed on the map.
 func (a *Amadeus) Hotels(ctx context.Context, at LatLng, checkIn, checkOut string, nights int, dest string) []HotelQuote {
 	if a.Enabled() {
 		var list struct {
 			Data []struct {
 				HotelID string `json:"hotelId"`
 				Name    string `json:"name"`
+				GeoCode struct {
+					Latitude  float64 `json:"latitude"`
+					Longitude float64 `json:"longitude"`
+				} `json:"geoCode"`
+				Distance struct {
+					Value float64 `json:"value"`
+					Unit  string  `json:"unit"`
+				} `json:"distance"`
 			} `json:"data"`
 		}
 		q := url.Values{"latitude": {fmt.Sprint(at.Lat)}, "longitude": {fmt.Sprint(at.Lng)}, "radius": {"15"}, "radiusUnit": {"KM"}}
 		if err := a.get(ctx, "/v1/reference-data/locations/hotels/by-geocode", q, &list); err == nil && len(list.Data) > 0 {
+			type meta struct {
+				at LatLng
+				km float64
+			}
+			where := map[string]meta{}
 			ids := make([]string, 0, 10)
 			for i, h := range list.Data {
 				if i >= 10 {
 					break
 				}
 				ids = append(ids, h.HotelID)
+				km := h.Distance.Value
+				if strings.EqualFold(h.Distance.Unit, "MILE") {
+					km *= 1.609
+				}
+				where[h.HotelID] = meta{at: LatLng{Lat: h.GeoCode.Latitude, Lng: h.GeoCode.Longitude}, km: km}
 			}
 			var offers struct {
 				Data []struct {
 					Hotel struct {
-						Name   string `json:"name"`
-						Rating string `json:"rating"`
+						HotelID string `json:"hotelId"`
+						Name    string `json:"name"`
+						Rating  string `json:"rating"`
 					} `json:"hotel"`
 					Offers []struct {
 						Price struct {
 							Total string `json:"total"`
 						} `json:"price"`
+						Room struct {
+							TypeEstimated struct {
+								Category string `json:"category"`
+							} `json:"typeEstimated"`
+						} `json:"room"`
 					} `json:"offers"`
 				} `json:"data"`
 			}
@@ -165,15 +191,24 @@ func (a *Amadeus) Hotels(ctx context.Context, at LatLng, checkIn, checkOut strin
 					}
 					total, _ := strconv.ParseFloat(d.Offers[0].Price.Total, 64)
 					rating, _ := strconv.ParseFloat(d.Hotel.Rating, 64)
+					if rating == 0 {
+						rating = 3.8 // Amadeus test data often omits stars
+					}
 					n := nights
 					if n < 1 {
 						n = 1
 					}
-					quotes = append(quotes, HotelQuote{
-						Name: d.Hotel.Name, Rating: rating, Nights: nights,
+					m := where[d.Hotel.HotelID]
+					hq := HotelQuote{
+						Name: titleWords(d.Hotel.Name), Rating: rating, Nights: nights,
 						TotalUSD: round2(total), NightlyUSD: round2(total / float64(n)),
-						Kind: "hotel", Source: "amadeus",
-					})
+						Kind: "hotel", DistanceKm: round1(m.km), Location: m.at, Source: "amadeus",
+						Area: areaLabel(m.km), URL: hotelSearchURL(d.Hotel.Name, dest, checkIn, checkOut),
+					}
+					if c := d.Offers[0].Room.TypeEstimated.Category; c != "" {
+						hq.Amenities = []string{strings.ToLower(strings.ReplaceAll(c, "_", " "))}
+					}
+					quotes = append(quotes, hq)
 				}
 				if len(quotes) > 0 {
 					return quotes
@@ -181,7 +216,45 @@ func (a *Amadeus) Hotels(ctx context.Context, at LatLng, checkIn, checkOut strin
 			}
 		}
 	}
-	return mockHotels(dest, nights)
+	return mockHotels(at, dest, nights, checkIn, checkOut)
+}
+
+// hotelSearchURL is a plain web search for the stay; we do not pretend to be
+// a booking engine. Google's hotel search understands "<name> <city>" well.
+func hotelSearchURL(name, dest, checkIn, checkOut string) string {
+	q := url.Values{"q": {name + " " + dest}}
+	if checkIn != "" && checkOut != "" {
+		q.Set("checkin", checkIn)
+		q.Set("checkout", checkOut)
+	}
+	return "https://www.google.com/travel/hotels?" + q.Encode()
+}
+
+func areaLabel(km float64) string {
+	switch {
+	case km <= 1.5:
+		return "downtown"
+	case km <= 4:
+		return "near downtown"
+	case km <= 10:
+		return "in town"
+	default:
+		return "outskirts"
+	}
+}
+
+// titleWords fixes the SHOUTING names Amadeus returns.
+func titleWords(s string) string {
+	if s != strings.ToUpper(s) {
+		return s
+	}
+	w := strings.Fields(strings.ToLower(s))
+	for i := range w {
+		if len(w[i]) > 0 {
+			w[i] = strings.ToUpper(w[i][:1]) + w[i][1:]
+		}
+	}
+	return strings.Join(w, " ")
 }
 
 func parseISODurationMin(s string) int { // PT5H30M
@@ -225,18 +298,55 @@ func mockFlights(o, d, depart, ret string) []FlightQuote {
 	return out
 }
 
-func mockHotels(dest string, nights int) []HotelQuote {
+func mockHotels(at LatLng, dest string, nights int, checkIn, checkOut string) []HotelQuote {
 	s := seed(dest)
-	names := []string{"The Marquee Hotel", "Riverside Inn", "Loft & Co. Rental", "Summit Suites", "Old Town B&B"}
-	kinds := []string{"hotel", "hotel", "rental", "hotel", "rental"}
-	out := make([]HotelQuote, 0, len(names))
-	for i, n := range names {
+	short := shortCity(dest)
+	type tmpl struct {
+		name, kind, area string
+		km               float64
+		amen             []string
+	}
+	ts := []tmpl{
+		{"The " + short + " Grand", "hotel", "downtown", 0.6, []string{"rooftop bar", "gym", "valet"}},
+		{short + " Riverside Inn", "inn", "near downtown", 2.1, []string{"free breakfast", "free parking"}},
+		{"Loft on Main", "rental", "downtown", 1.1, []string{"full kitchen", "sleeps 4", "washer"}},
+		{"Summit Suites " + short, "hotel", "in town", 5.4, []string{"pool", "free parking", "suites"}},
+		{"Old Town B&B", "inn", "near downtown", 1.8, []string{"breakfast included", "garden"}},
+		{short + " Lodge & Cabins", "resort", "outskirts", 9.5, []string{"hot tub", "kitchenette", "free parking"}},
+	}
+	out := make([]HotelQuote, 0, len(ts))
+	for i, t := range ts {
 		nightly := 79 + float64((s>>uint(i))%160)
+		if t.area == "downtown" {
+			nightly += 40
+		}
+		// Scatter around the city centre at roughly the stated distance.
+		ang := float64((s>>uint(i*3))%360) * math.Pi / 180
+		dLat := t.km / 111 * math.Cos(ang)
+		dLng := t.km / (111 * math.Cos(at.Lat*math.Pi/180)) * math.Sin(ang)
 		out = append(out, HotelQuote{
-			Name: n, Rating: 3.4 + float64((s+uint32(i))%16)/10, NightlyUSD: round2(nightly),
-			Nights: nights, TotalUSD: round2(nightly * float64(nights)), Kind: kinds[i],
-			DistanceKm: round1(float64((s>>uint(i+2))%80) / 10), Source: "mock",
+			Name: t.name, Rating: 3.4 + float64((s+uint32(i))%16)/10, NightlyUSD: round2(nightly),
+			Nights: nights, TotalUSD: round2(nightly * float64(nights)), Kind: t.kind,
+			DistanceKm: t.km, Location: LatLng{Lat: round4(at.Lat + dLat), Lng: round4(at.Lng + dLng)},
+			Area: t.area, Amenities: t.amen, URL: hotelSearchURL(t.name, dest, checkIn, checkOut), Source: "mock",
 		})
 	}
 	return out
 }
+
+// shortCity turns "Kansas City, MO" into "Kansas City" for hotel names.
+func shortCity(dest string) string {
+	d := strings.TrimSpace(dest)
+	if i := strings.Index(d, ","); i > 0 {
+		d = d[:i]
+	}
+	if i := strings.Index(d, "("); i > 0 {
+		d = strings.TrimSpace(d[:i])
+	}
+	if d == "" {
+		return "City"
+	}
+	return titleWords(strings.ToUpper(d))
+}
+
+func round4(v float64) float64 { return math.Round(v*10000) / 10000 }

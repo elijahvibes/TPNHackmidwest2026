@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"trailmix/internal/auth"
 	"trailmix/internal/httpx"
 	"trailmix/internal/planner"
+	"trailmix/internal/travel"
 )
 
 type Trip struct {
@@ -146,16 +148,49 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var extra struct {
-		VehicleMPG float64  `json:"vehicle_mpg"`
-		Interests  []string `json:"interests"`
+		VehicleMPG float64        `json:"vehicle_mpg"`
+		Interests  []string       `json:"interests"`
+		Mode       string         `json:"mode"`       // re-plan as drive/fly/auto; persisted on the trip
+		OriginLoc  *travel.LatLng `json:"origin_loc"` // pinned points from the form's autocomplete
+		DestLoc    *travel.LatLng `json:"dest_loc"`
 	}
 	_ = httpx.Decode(r, &extra) // body optional
+	if extra.Mode == "drive" || extra.Mode == "fly" || extra.Mode == "auto" {
+		t.Mode = extra.Mode
+	}
 	req := planner.Request{
 		Origin: t.Origin, Destination: t.Destination, StartDate: t.StartDate, EndDate: t.EndDate,
 		Travelers: t.Travelers, Mode: t.Mode, VehicleMPG: extra.VehicleMPG, Interests: extra.Interests,
+		OriginLoc: extra.OriginLoc, DestLoc: extra.DestLoc,
 	}
 	if t.BudgetUSD != nil {
 		req.BudgetUSD = *t.BudgetUSD
+	}
+	// A re-plan keeps the points the first plan resolved, so a town picked from
+	// autocomplete never has to be geocoded again from its label.
+	if t.Plan != nil && (req.OriginLoc == nil || req.DestLoc == nil) {
+		var prev struct {
+			OriginLoc travel.LatLng `json:"origin_loc"`
+			DestLoc   travel.LatLng `json:"dest_loc"`
+		}
+		if json.Unmarshal(t.Plan, &prev) == nil {
+			if req.OriginLoc == nil && prev.OriginLoc.Lat != 0 {
+				req.OriginLoc = &prev.OriginLoc
+			}
+			if req.DestLoc == nil && prev.DestLoc.Lat != 0 {
+				req.DestLoc = &prev.DestLoc
+			}
+		}
+		if req.VehicleMPG == 0 {
+			var drive struct {
+				Drive struct {
+					VehicleMPG float64 `json:"vehicle_mpg"`
+				} `json:"drive"`
+			}
+			if json.Unmarshal(t.Plan, &drive) == nil {
+				req.VehicleMPG = drive.Drive.VehicleMPG
+			}
+		}
 	}
 	plan, err := d.Planner.Plan(r.Context(), req)
 	if err != nil {
@@ -163,11 +198,69 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw, _ := json.Marshal(plan)
-	if _, err := d.DB.ExecContext(r.Context(), "UPDATE trips SET plan=?, status='planned' WHERE id=?", string(raw), t.ID); err != nil {
+	if _, err := d.DB.ExecContext(r.Context(), "UPDATE trips SET plan=?, status='planned', mode=? WHERE id=?", string(raw), t.Mode, t.ID); err != nil {
 		httpx.Error(w, 500, "save failed")
 		return
 	}
 	httpx.JSON(w, 200, plan)
+}
+
+// chooseHotel swaps the plan's stay for another quote it already holds and
+// re-totals everything. POST /api/trips/{id}/hotel {"name": "..."}.
+func (d *Deps) chooseHotel(w http.ResponseWriter, r *http.Request) {
+	c := auth.FromContext(r.Context())
+	t, err := d.tripByID(r, chi.URLParam(r, "id"), c.UserID)
+	if err != nil {
+		httpx.Error(w, 404, "trip not found")
+		return
+	}
+	if t.Plan == nil {
+		httpx.Error(w, 400, "plan the trip first")
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := httpx.Decode(r, &in); err != nil || in.Name == "" {
+		httpx.Error(w, 400, "name is required")
+		return
+	}
+	var plan planner.Plan
+	if err := json.Unmarshal(t.Plan, &plan); err != nil {
+		httpx.Error(w, 500, "stored plan is unreadable")
+		return
+	}
+	budget := 0.0
+	if t.BudgetUSD != nil {
+		budget = *t.BudgetUSD
+	}
+	if err := plan.ChooseHotel(in.Name, budget); err != nil {
+		httpx.Error(w, 404, err.Error())
+		return
+	}
+	raw, _ := json.Marshal(plan)
+	if _, err := d.DB.ExecContext(r.Context(), "UPDATE trips SET plan=? WHERE id=?", string(raw), t.ID); err != nil {
+		httpx.Error(w, 500, "save failed")
+		return
+	}
+	httpx.JSON(w, 200, plan)
+}
+
+// geoSuggest: GET /api/geo/suggest?q=law → cities/towns/parks matching the prefix.
+func (d *Deps) geoSuggest(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	if len(q) < 2 {
+		httpx.JSON(w, 200, []travel.Placemark{})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+	out := d.Planner.Geo.Suggest(ctx, q, 6)
+	if out == nil {
+		out = []travel.Placemark{}
+	}
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	httpx.JSON(w, 200, out)
 }
 
 // shareTrip returns a planned trip to anyone holding its id (a UUID), so a

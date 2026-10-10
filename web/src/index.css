@@ -42,6 +42,9 @@ body {
 .label { @apply font-mono text-[11px] uppercase tracking-widest text-muted; }
 .tag { @apply font-mono text-[11px] px-2 py-0.5 rounded border border-line text-muted; }
 
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
 .caret::after {
   content: '▋';
   color: var(--color-accent);
@@ -49,3 +52,18 @@ body {
   margin-left: 2px;
 }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* date inputs on dark backgrounds */
+input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+
+/* Print: the itinerary as a clean handout */
+@media print {
+  body { background: #fff; color: #111; background-image: none; }
+  header, footer, nav, .print\:hidden { display: none !important; }
+  .panel { border-color: #ccc; background: #fff; }
+  .text-muted, .text-dim { color: #444 !important; }
+  .text-ink { color: #111 !important; }
+  .text-accent { color: #0a7a3a !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  a[href]::after { content: none; }
+}

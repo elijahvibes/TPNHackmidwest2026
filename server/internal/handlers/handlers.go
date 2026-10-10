@@ -45,9 +45,10 @@ func Mount(r chi.Router, d *Deps) {
 		})
 	})
 
-	// No login needed: the landing-page demo uses both of these.
+	// No login needed: the landing-page demo uses all of these.
 	r.Post("/plan/preview", d.planPreview)
 	r.Get("/vehicles/mpg", d.vehicleMPG)
+	r.Get("/geo/suggest", d.geoSuggest) // city autocomplete (any city, not just the demo list)
 
 	r.Group(func(r chi.Router) {
 		r.Use(d.requireDB)
@@ -66,6 +67,7 @@ func Mount(r chi.Router, d *Deps) {
 		r.Get("/trips/{id}", d.getTrip)
 		r.Delete("/trips/{id}", d.deleteTrip)
 		r.Post("/trips/{id}/plan", d.planTrip)
+		r.Post("/trips/{id}/hotel", d.chooseHotel) // swap the stay, re-total the plan
 
 		r.Get("/payments", d.listPayments)
 		r.Post("/payments", d.createPayment)
