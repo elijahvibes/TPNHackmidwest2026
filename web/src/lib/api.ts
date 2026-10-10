@@ -14,6 +14,21 @@ export type LatLng = { lat: number; lng: number }
 export type FlightQuote = {
   carrier: string; origin: string; destination: string; depart: string; return?: string
   price_usd: number; stops: number; duration_min: number; source: string
+  departure_time?: string; arrival_time?: string; flight_numbers?: string[]
+  departure_token?: string; booking_token?: string
+}
+export type FlightSearch = {
+  origin: string; destination: string; depart: string; return: string; travelers: number
+  departure_token?: string; booking_token?: string
+}
+export type BookingSeller = {
+  book_with: string; price: number; option_title: string; extensions: string[] | null
+  baggage_prices: string[] | null; booking_phone?: string
+  booking_request: { url: string; post_data?: string }
+}
+export type BookingOption = {
+  separate_tickets: boolean
+  together?: BookingSeller; departing?: BookingSeller; returning?: BookingSeller
 }
 export type HotelQuote = {
   name: string; rating: number; nightly_usd: number; nights: number; total_usd: number
@@ -44,6 +59,8 @@ export type Plan = {
   origin_loc: LatLng; dest_loc: LatLng; ai_generated: boolean
   weather: Weather; safety: Safety
   sources: Record<string, string>; generated_at: string
+  travelers?: number; budget_usd?: number; selected_flight?: number; selected_return?: FlightQuote
+  flight_selected?: boolean; origin_name?: string; destination_name?: string
 }
 
 export type Trip = {
@@ -92,7 +109,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  health: () => request<{ ok: boolean; ai: boolean; amadeus: boolean; payments: boolean }>('GET', '/health'),
+  health: () => request<{ ok: boolean; db: boolean; ai: boolean; serpapi: boolean; payments: boolean }>('GET', '/health'),
 
   register: (email: string, name: string, password: string) =>
     request<{ token: string; user: User }>('POST', '/auth/register', { email, name, password }),
@@ -107,6 +124,12 @@ export const api = {
       'GET', `/vehicles/mpg?year=${year}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}`),
 
   planPreview: (req: PlanRequest) => request<Plan>('POST', '/plan/preview', req),
+  selectPreviewFlight: (plan: Plan, flight_index: number, return_token?: string) =>
+    request<Plan>('POST', '/plan/flight', { plan, flight_index, return_token }),
+  returnFlights: (search: FlightSearch) => request<FlightQuote[]>('POST', '/flights/returns', search),
+  flightBookings: (search: FlightSearch) => request<BookingOption[]>('POST', '/flights/bookings', search),
+  selectTripFlight: (id: string, flight_index: number, return_token?: string) =>
+    request<Plan>('POST', `/trips/${id}/flight`, { flight_index, return_token }),
 
   share: (id: string) => request<Trip>('GET', `/share/${id}`),
 

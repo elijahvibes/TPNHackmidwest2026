@@ -18,7 +18,7 @@ untested (needs Postgres or an API key) · ⬜ not started.
 | Area | File | Status | Notes |
 |---|---|---|---|
 | HTTP server, CORS, static SPA serving | `cmd/api/main.go` | ✅ | Runs in degraded mode if Postgres is down |
-| Config from env | `internal/config` | ✅ | Every integration optional |
+| Config from env | `internal/config` | ✅ | `SERPAPI_KEY` required for trip planning; other integrations optional |
 | MySQL (Akamai managed) + auto-migrations | `internal/db`, `migrations/001_init.sql` | ✅ | Tables: users, vehicles, trips, payments |
 | Register / login / me / update home location | `internal/handlers/auth.go` | 🟡 | bcrypt + 7-day JWT |
 | Trips CRUD + plan + preview | `internal/handlers/trips.go` | 🟡 preview ✅ | Plan stored as JSONB on the trip |
@@ -27,7 +27,7 @@ untested (needs Postgres or an API key) · ⬜ not started.
 | AI client (OpenAI-compatible) | `internal/ai` | 🟡 | Needs `AI_BASE_URL` |
 | Geocoding + routing | `internal/travel/geo.go` | ✅ gazetteer / 🟡 Mapbox | 22 cities built in |
 | Gas price + vehicle MPG | `internal/travel/fuel.go` | ✅ MPG live / 🟡 EIA | fueleconomy.gov needs no key |
-| Flights + hotels | `internal/travel/amadeus.go` | 🟡 | Mock fallback ✅ |
+| Flights + hotels | `internal/travel/serpapi.go` | ✅ | SerpApi Google Travel prices; no mock fallback |
 | Things to do / food / rest stops | `internal/travel/places.go` | 🟡 | Mock fallback ✅ |
 
 ### Frontend (`web/`, Vite + React 19 + TypeScript + Tailwind 4)
@@ -67,7 +67,7 @@ untested (needs Postgres or an API key) · ⬜ not started.
    ├─ planner   (orchestrates below)   │   Akamai Managed MySQL (users, vehicles, trips.plan JSON, payments)
    │    ├─ travel.Geo      → Mapbox            (geocode, directions)
    │    ├─ travel.Fuel     → fueleconomy.gov    (MPG, no key)   + EIA (gas $/gal)
-   │    ├─ travel.Amadeus  → Amadeus test API   (flights, hotels)
+   │    ├─ travel.SerpAPI  → Google Travel via SerpApi (flights, hotels)
    │    ├─ travel.Places   → Google Places New  (attractions, food, rest stops)
    │    └─ ai.Client       → Akamai Inference   (OpenAI-compatible chat completions)
    └─ payments.Client      → Jack Henry sandbox
@@ -76,7 +76,7 @@ untested (needs Postgres or an API key) · ⬜ not started.
 Request flow for "plan my trip":
 
 1. Geocode origin (browser GPS if given) and destination.
-2. Route + gas cost, flights, hotels, places, rest stops. Each provider returns mock data if its key is missing and tags its `source`.
+2. Route + gas cost, flights, hotels, places, rest stops. Flights and hotels require `SERPAPI_KEY` and fail explicitly when unavailable. Other providers retain labeled fallbacks.
 3. Build `drive` and `fly` options. `value = 10000 / (cost_per_night + 50) − 0.6 × travel_hours`. Best value that fits the budget wins; user can force a mode.
 4. Send the real numbers to the LLM with a strict JSON schema. The model arranges, never invents prices. On any failure, the deterministic fallback itinerary is used.
 5. Store the plan on the trip; UI renders it.
@@ -118,8 +118,8 @@ Risk: Docker Desktop on the Windows laptop would not start its engine today. If 
 
 | # | Task | Size | Done when |
 |---|---|---|---|
-| C1 | Sign up for Amadeus Self-Service, set `AMADEUS_KEY/SECRET`; test MCI→DEN flights and Denver hotels | S | `sources.flights == "amadeus"` |
-| C2 | Replace the hard-coded `IATA()` map with Amadeus `/v1/reference-data/locations?subType=AIRPORT,CITY` lookup, cached in memory | M | Any US city gets an airport |
+| C1 | Set `SERPAPI_KEY`; test MCI→DEN flights and Denver hotels | S | `sources.flights == "serpapi"` |
+| C2 | Replace the hard-coded `IATA()` map with a supported airport/city lookup, cached in memory | M | Any US city gets an airport |
 | C3 | Mapbox token: geocode arbitrary places, real driving distance/time | S | "Branson, MO" works |
 | C4 | Google Places (New) key; verify attractions/food/rest stops; tune `includedTypes` per interest | S | Real place names in plan |
 | C5 | EIA key for the real weekly gas price; stretch: use the regional series (PADD) matching the route | S | `sources.gas == "eia"` |
@@ -209,7 +209,7 @@ what does not. The "no-input" column is being worked by Claude in this session; 
 | Order | Task | Who | Minutes |
 |---|---|---|---|
 | 1 | **Sponsor tables**: Akamai inference endpoint + key; Jack Henry sandbox URL, auth, "create payment" docs (B1, G1) | ____ | 30 |
-| 2 | **Keys**: Amadeus Self-Service, Mapbox, Google Places (New), EIA. Paste into a shared note and into `.env` (C1, C3, C4, C5) | ____ | 30 |
+| 2 | **Keys**: SerpApi, Mapbox, Google Places (New), EIA. Store securely and configure `.env` (C1, C3, C4, C5) | ____ | 30 |
 | 3 | **Linode**: create Ubuntu 24.04 2 GB instance, `apt install docker.io docker-compose-v2 git`, clone repo, copy `.env` (A2) | ____ | 30 |
 | 4 | First deploy: `docker compose --profile prod up -d --build` on the Linode, open `http://<ip>` (A3) | same | 20 |
 | 5 | Run `.\scripts\dev-db.ps1` (Windows) or `docker compose up -d db` locally so you can test accounts (A1) | everyone | 10 |
@@ -242,13 +242,13 @@ F5 share link, G6 webhooks, E2–E4 profile/vehicle/edit. Revisit only if everyt
 
 ## 6. The demo (what we are building toward)
 
-1. **Landing**: type "Kansas City → Nashville, 2 people, $900, Oct 24–27", click *use my location*, look up a 2019 Civic's MPG live. Hit *try it*. Point out the source tags flipping from `mock` to `amadeus` / `google` / `eia`.
+1. **Landing**: type "Kansas City → Nashville, 2 people, $900, Oct 24–27", click *use my location*, look up a 2019 Civic's MPG live. Hit *try it*. Point out the `serpapi` flight/hotel source tags and other providers' `google` / `eia` tags.
 2. **The value call**: show drive vs fly cards, the value score, and the "why". Flip the mode to *fly* and show the budget warning.
 3. **AI on Akamai**: scroll the itinerary, call out `✦ itinerary by AI on Akamai`, that the model only arranged real prices.
 4. **Map**: route line with rest stops and the hotel pin.
 5. **Account**: sign up, save the trip, show it on the dashboard.
 6. **Book with Jack Henry**: confirm modal → charge in the sandbox → receipt → trip marked `booked`.
-7. **Close**: one Linode, one container, model on Akamai, every provider degrades gracefully.
+7. **Close**: one Linode, one container, model on Akamai; flights and hotels use real provider results or explicit errors, while other providers retain fallbacks.
 
 Target: under 4 minutes.
 
@@ -260,11 +260,11 @@ Target: under 4 minutes.
 |---|---|---|
 | Jack Henry sandbox is not a simple REST "pay" call | High | G1 first thing; mock mode already demoable; show the sandbox call in a terminal if the UI path is blocked |
 | Akamai inference endpoint not OpenAI-compatible | Medium | `ai.Client` is 150 lines; adapt request/response shapes; Ollama on a GPU Linode as backup |
-| Amadeus test env lacks small-airport routes | Medium | C2 city lookup + mock fallback with `source` tag; pick demo cities that work (KC, Denver, Nashville, Chicago all tested in test env) |
+| SerpApi quotas or missing priced routes | Medium | Use supported airports, retain provider caching, and show explicit errors; never substitute mock flight or hotel prices |
 | Model returns bad JSON | High | B3 repair pass, B4 validation, fallback itinerary |
 | Docker Desktop flaky on Windows | Known | Native Postgres locally; Docker only on Linode |
 | Google Places billing/quota | Low | Cache (C7); 20 km radius, ≤ 6 results per call |
-| Wi-Fi at the venue | Medium | H4 `MOCK_MODE` backup; everything works offline except AI and live prices |
+| Wi-Fi at the venue | Medium | Prepare connectivity; new plans and seed trips require live SerpApi flight/hotel searches, regardless of `MOCK_MODE` |
 
 ---
 

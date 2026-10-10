@@ -1,6 +1,6 @@
 // Package travel wraps every third-party price/data source behind a small
-// interface. Each provider degrades to realistic mock data when its API key is
-// absent, so the planner always produces a priced itinerary.
+// interface. Flights and hotels require SerpApi; other providers may use
+// labeled mock data or estimates when their API keys are absent.
 package travel
 
 type LatLng struct {
@@ -9,15 +9,52 @@ type LatLng struct {
 }
 
 type FlightQuote struct {
-	Carrier     string  `json:"carrier"`
-	Origin      string  `json:"origin"`
-	Destination string  `json:"destination"`
-	Depart      string  `json:"depart"`
-	Return      string  `json:"return,omitempty"`
-	PriceUSD    float64 `json:"price_usd"` // per traveler, round trip
-	Stops       int     `json:"stops"`
-	DurationMin int     `json:"duration_min"`
-	Source      string  `json:"source"` // amadeus | mock
+	Carrier        string   `json:"carrier"`
+	Origin         string   `json:"origin"`
+	Destination    string   `json:"destination"`
+	Depart         string   `json:"depart"`
+	Return         string   `json:"return,omitempty"`
+	PriceUSD       float64  `json:"price_usd"` // per traveler, round trip
+	Stops          int      `json:"stops"`
+	DurationMin    int      `json:"duration_min"`
+	Source         string   `json:"source"` // serpapi
+	DepartureTime  string   `json:"departure_time,omitempty"`
+	ArrivalTime    string   `json:"arrival_time,omitempty"`
+	FlightNumbers  []string `json:"flight_numbers,omitempty"`
+	DepartureToken string   `json:"departure_token,omitempty"`
+	BookingToken   string   `json:"booking_token,omitempty"`
+}
+
+type FlightSearch struct {
+	Origin         string `json:"origin"`
+	Destination    string `json:"destination"`
+	Depart         string `json:"depart"`
+	Return         string `json:"return"`
+	Travelers      int    `json:"travelers"`
+	DepartureToken string `json:"departure_token,omitempty"`
+	BookingToken   string `json:"booking_token,omitempty"`
+}
+
+type BookingAction struct {
+	URL      string `json:"url"`
+	PostData string `json:"post_data,omitempty"`
+}
+
+type BookingSeller struct {
+	Name       string        `json:"book_with"`
+	Price      float64       `json:"price"`
+	Title      string        `json:"option_title"`
+	Extensions []string      `json:"extensions"`
+	Baggage    []string      `json:"baggage_prices"`
+	Action     BookingAction `json:"booking_request"`
+	Phone      string        `json:"booking_phone,omitempty"`
+}
+
+type BookingOption struct {
+	SeparateTickets bool           `json:"separate_tickets"`
+	Together        *BookingSeller `json:"together,omitempty"`
+	Departing       *BookingSeller `json:"departing,omitempty"`
+	Returning       *BookingSeller `json:"returning,omitempty"`
 }
 
 type HotelQuote struct {
