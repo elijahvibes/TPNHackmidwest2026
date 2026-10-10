@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, type Plan } from '../lib/api'
 import TripForm, { type TripFormValue } from '../components/TripForm'
 import PlanView from '../components/PlanView'
+import PlanProgress from '../components/PlanProgress'
 import { useAuth } from '../lib/auth'
 
 export default function Landing() {
@@ -36,6 +37,7 @@ export default function Landing() {
       </section>
 
       <TripForm onSubmit={run} busy={busy} submitLabel={user ? 'preview plan' : 'try it'} />
+      <PlanProgress active={busy} />
       {err && <div className="mono text-sm text-rose">error: {err}</div>}
       {plan && (
         <>

@@ -1,7 +1,7 @@
 // Package ai talks to any OpenAI-compatible chat completions endpoint.
 // Point AI_BASE_URL at Akamai Inference Cloud (or Ollama on a Linode GPU box)
-// and it just works; with no AI_BASE_URL it returns a canned response so the
-// rest of the app stays demoable.
+// and it just works; with no AI_BASE_URL the planner uses its deterministic
+// fallback so the rest of the app stays demoable.
 package ai
 
 import (
@@ -27,7 +27,7 @@ func New(baseURL, apiKey, model string) *Client {
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		model:   model,
-		http:    &http.Client{Timeout: 90 * time.Second},
+		http:    &http.Client{Timeout: 75 * time.Second},
 	}
 }
 
@@ -38,13 +38,15 @@ type Message struct {
 	Content string `json:"content"`
 }
 
+type responseFormat struct {
+	Type string `json:"type"`
+}
+
 type chatRequest struct {
-	Model          string    `json:"model"`
-	Messages       []Message `json:"messages"`
-	Temperature    float64   `json:"temperature"`
-	ResponseFormat *struct {
-		Type string `json:"type"`
-	} `json:"response_format,omitempty"`
+	Model          string          `json:"model"`
+	Messages       []Message       `json:"messages"`
+	Temperature    float64         `json:"temperature"`
+	ResponseFormat *responseFormat `json:"response_format,omitempty"`
 }
 
 type chatResponse struct {
@@ -56,24 +58,45 @@ type chatResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// Chat sends messages and returns the assistant's text. When wantJSON is true
-// the endpoint is asked for a JSON object (supported by most OpenAI-compatible servers).
+// Chat sends a system + user message and returns the assistant text.
 func (c *Client) Chat(ctx context.Context, system, user string, wantJSON bool) (string, error) {
+	return c.chat(ctx, []Message{{Role: "system", Content: system}, {Role: "user", Content: user}}, wantJSON)
+}
+
+// ChatJSON asks for a JSON object and decodes it into out. If the first reply
+// is not valid JSON it sends the broken text back once and asks the model to
+// repair it, which fixes most small-model slips (trailing commas, prose
+// around the object, unbalanced braces).
+func (c *Client) ChatJSON(ctx context.Context, system, user string, out any) error {
+	msgs := []Message{{Role: "system", Content: system}, {Role: "user", Content: user}}
+	raw, err := c.chat(ctx, msgs, true)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal([]byte(extractObject(raw)), out); err == nil {
+		return nil
+	}
+	msgs = append(msgs,
+		Message{Role: "assistant", Content: raw},
+		Message{Role: "user", Content: "That was not valid JSON. Reply with ONLY the corrected JSON object, no prose, no code fences."},
+	)
+	raw2, err := c.chat(ctx, msgs, true)
+	if err != nil {
+		return fmt.Errorf("ai repair: %w", err)
+	}
+	if err := json.Unmarshal([]byte(extractObject(raw2)), out); err != nil {
+		return fmt.Errorf("ai returned invalid JSON twice: %w (raw: %.160s)", err, raw2)
+	}
+	return nil
+}
+
+func (c *Client) chat(ctx context.Context, msgs []Message, wantJSON bool) (string, error) {
 	if !c.Enabled() {
 		return "", fmt.Errorf("ai: AI_BASE_URL not configured")
 	}
-	req := chatRequest{
-		Model:       c.model,
-		Temperature: 0.4,
-		Messages: []Message{
-			{Role: "system", Content: system},
-			{Role: "user", Content: user},
-		},
-	}
+	req := chatRequest{Model: c.model, Temperature: 0.4, Messages: msgs}
 	if wantJSON {
-		req.ResponseFormat = &struct {
-			Type string `json:"type"`
-		}{Type: "json_object"}
+		req.ResponseFormat = &responseFormat{Type: "json_object"}
 	}
 	body, _ := json.Marshal(req)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))
@@ -104,6 +127,17 @@ func (c *Client) Chat(ctx context.Context, system, user string, wantJSON bool) (
 		return "", fmt.Errorf("ai: empty response")
 	}
 	return stripFence(out.Choices[0].Message.Content), nil
+}
+
+// extractObject returns the substring from the first '{' to the last '}',
+// which drops any prose a model wraps around its JSON.
+func extractObject(s string) string {
+	s = stripFence(s)
+	i, j := strings.Index(s, "{"), strings.LastIndex(s, "}")
+	if i >= 0 && j > i {
+		return s[i : j+1]
+	}
+	return s
 }
 
 // stripFence removes ```json fences that smaller models like to add.

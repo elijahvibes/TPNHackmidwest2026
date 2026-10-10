@@ -26,7 +26,9 @@ export default function PlanView({ plan }: { plan: Plan }) {
           {Object.entries(plan.sources).map(([k, v]) => (
             <span key={k} className="tag">{k}: <span className={v === 'mock' || v === 'fallback' || v === 'estimate' ? 'text-dim' : 'text-cyan'}>{v}</span></span>
           ))}
-          {plan.ai_generated && <span className="tag text-accent">✦ itinerary by AI on Akamai</span>}
+          {plan.ai_generated
+            ? <span className="tag text-accent">✦ itinerary by AI on Akamai</span>
+            : <span className="tag text-amber">itinerary: rule-based fallback (AI offline)</span>}
         </div>
       </section>
 
@@ -40,6 +42,11 @@ export default function PlanView({ plan }: { plan: Plan }) {
             </div>
             <div className="mono text-2xl mt-2">{usd(o.total_usd)}</div>
             <div className="text-muted text-sm mt-1">{o.why}</div>
+            {o.factors?.length > 0 && (
+              <ul className="mono text-[11px] text-dim mt-2 grid gap-0.5">
+                {o.factors.map((f, i) => <li key={i}>· {f}</li>)}
+              </ul>
+            )}
             <dl className="mono text-xs grid grid-cols-3 gap-2 mt-3 text-muted">
               <div><dt className="text-dim">transport</dt><dd>{usd(o.transport_usd)}</dd></div>
               <div><dt className="text-dim">lodging</dt><dd>{usd(o.lodging_usd)}</dd></div>

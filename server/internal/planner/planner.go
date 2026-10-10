@@ -31,14 +31,15 @@ type Request struct {
 }
 
 type Option struct {
-	Mode          string  `json:"mode"`
-	TransportUSD  float64 `json:"transport_usd"`
-	LodgingUSD    float64 `json:"lodging_usd"`
-	ActivitiesUSD float64 `json:"activities_usd"`
-	TotalUSD      float64 `json:"total_usd"`
-	TravelHours   float64 `json:"travel_hours"`
-	ValueScore    float64 `json:"value_score"` // higher is better
-	Why           string  `json:"why"`
+	Mode          string   `json:"mode"`
+	TransportUSD  float64  `json:"transport_usd"`
+	LodgingUSD    float64  `json:"lodging_usd"`
+	ActivitiesUSD float64  `json:"activities_usd"`
+	TotalUSD      float64  `json:"total_usd"`
+	TravelHours   float64  `json:"travel_hours"`
+	ValueScore    float64  `json:"value_score"` // higher is better
+	Why           string   `json:"why"`
+	Factors       []string `json:"factors"` // human-readable breakdown of the score
 }
 
 type DayItem struct {
@@ -140,10 +141,6 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	})
 
 	// 3. Score the options.
-	lodging := 0.0
-	if len(hotels) > 0 {
-		lodging = hotels[0].TotalUSD
-	}
 	actCost := 0.0
 	for _, a := range activities[:min(4, len(activities))] {
 		actCost += a.PriceUSD * float64(req.Travelers)
@@ -153,12 +150,32 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	}
 	actCost = round2(actCost)
 
+	// Hotel choice honors the budget: the best-rated stay that still fits after
+	// the cheapest transport and activities; otherwise the cheapest stay.
+	minTransport := drive.RoundTripUSD
+	if len(flights) > 0 && flights[0].PriceUSD*float64(req.Travelers) < minTransport {
+		minTransport = flights[0].PriceUSD * float64(req.Travelers)
+	}
+	hotels = pickHotel(hotels, req.BudgetUSD-minTransport-actCost)
+	lodging := 0.0
+	hotelNote := "no stay found"
+	if len(hotels) > 0 {
+		lodging = hotels[0].TotalUSD
+		hotelNote = fmt.Sprintf("%s ★%.1f at $%.0f/night", hotels[0].Name, hotels[0].Rating, hotels[0].NightlyUSD)
+	}
+
 	driveOpt := Option{
 		Mode: "drive", TransportUSD: drive.RoundTripUSD, LodgingUSD: lodging, ActivitiesUSD: actCost,
 		TravelHours: round1(float64(drive.DurationMin) * 2 / 60),
 	}
 	driveOpt.TotalUSD = round2(driveOpt.TransportUSD + lodging + actCost)
 	driveOpt.Why = fmt.Sprintf("%.0f mi each way, %.1f gal of gas at $%.2f", drive.DistanceMiles, drive.GallonsNeeded, drive.GasPriceUSD)
+	driveOpt.Factors = []string{
+		fmt.Sprintf("$%.0f per night all-in", driveOpt.TotalUSD/float64(nights)),
+		fmt.Sprintf("%.1f h on the road round trip", driveOpt.TravelHours),
+		fmt.Sprintf("gas $%.0f for %d traveler(s), no per-seat cost", drive.RoundTripUSD, req.Travelers),
+		hotelNote,
+	}
 
 	options := []Option{driveOpt}
 	if len(flights) > 0 {
@@ -169,6 +186,12 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 		}
 		flyOpt.TotalUSD = round2(flyOpt.TransportUSD + lodging + actCost)
 		flyOpt.Why = fmt.Sprintf("%s round trip from $%.0f/person, %d stop(s)", f.Carrier, f.PriceUSD, f.Stops)
+		flyOpt.Factors = []string{
+			fmt.Sprintf("$%.0f per night all-in", flyOpt.TotalUSD/float64(nights)),
+			fmt.Sprintf("%.1f h door to door round trip incl. airport time", flyOpt.TravelHours),
+			fmt.Sprintf("$%.0f/person × %d = $%.0f airfare", f.PriceUSD, req.Travelers, flyOpt.TransportUSD),
+			hotelNote,
+		}
 		options = append(options, flyOpt)
 	}
 	for i := range options {
@@ -232,6 +255,37 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	return plan, nil
 }
 
+// pickHotel moves the chosen stay to index 0: the best-rated option whose total
+// fits in budgetLeft, else the cheapest. budgetLeft <= 0 means "no budget set"
+// when the caller passed no budget, so we fall back to best value (already sorted).
+func pickHotel(hotels []travel.HotelQuote, budgetLeft float64) []travel.HotelQuote {
+	if len(hotels) < 2 || budgetLeft <= 0 {
+		return hotels
+	}
+	best := -1
+	cheapest := 0
+	for i, h := range hotels {
+		if h.TotalUSD < hotels[cheapest].TotalUSD {
+			cheapest = i
+		}
+		if h.TotalUSD <= budgetLeft && (best < 0 || h.Rating > hotels[best].Rating) {
+			best = i
+		}
+	}
+	pick := best
+	if pick < 0 {
+		pick = cheapest
+	}
+	out := make([]travel.HotelQuote, 0, len(hotels))
+	out = append(out, hotels[pick])
+	for i, h := range hotels {
+		if i != pick {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
 // valueScore rewards low cost and low travel time per night of vacation.
 func valueScore(o Option, nights int) float64 {
 	costPerNight := o.TotalUSD / float64(nights)
@@ -254,20 +308,52 @@ func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start ti
 		"activities": plan.Activities, "food": plan.Food, "stops": plan.Stops,
 	})
 	system := `You are TrailMix, a sharp, budget-savvy travel planner. You are given REAL price data; never invent prices, only use the numbers provided. Reply with a single JSON object: {"summary": string (2-3 sentences, mention total cost and why this mode is the best value), "days": [{"day": int, "date": "YYYY-MM-DD", "theme": string, "items": [{"time": "HH:MM", "title": string, "detail": string, "cost_usd": number, "category": "transport|lodging|activity|food|stop"}]}]}. Day 1 starts with travel from origin; the last day ends with travel home. Use the activities, food and stops lists by name. Keep each day to 4-6 items.`
-	raw, err := p.AI.Chat(ctx, system, string(data), true)
-	if err != nil {
+	var out aiResponse
+	if err := p.AI.ChatJSON(ctx, system, string(data), &out); err != nil {
 		return err
 	}
-	var out aiResponse
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return fmt.Errorf("decode ai json: %w (raw: %.120s)", err, raw)
-	}
-	if out.Summary == "" || len(out.Days) == 0 {
+	days := sanitizeDays(out.Days, start, plan.Nights+1)
+	if strings.TrimSpace(out.Summary) == "" || len(days) == 0 {
 		return fmt.Errorf("ai returned empty plan")
 	}
-	plan.Summary = out.Summary
-	plan.Days = out.Days
+	plan.Summary = strings.TrimSpace(out.Summary)
+	plan.Days = days
 	return nil
+}
+
+var allowedCategories = map[string]bool{"transport": true, "lodging": true, "activity": true, "food": true, "stop": true}
+
+// sanitizeDays makes the model's itinerary safe to render: valid categories,
+// non-negative costs, sequential day numbers and dates, no empty days.
+func sanitizeDays(in []Day, start time.Time, maxDays int) []Day {
+	out := make([]Day, 0, len(in))
+	for _, d := range in {
+		items := make([]DayItem, 0, len(d.Items))
+		for _, it := range d.Items {
+			if strings.TrimSpace(it.Title) == "" {
+				continue
+			}
+			if !allowedCategories[it.Category] {
+				it.Category = "activity"
+			}
+			if it.CostUSD < 0 {
+				it.CostUSD = 0
+			}
+			if len(it.Time) != 5 {
+				it.Time = "--:--"
+			}
+			items = append(items, it)
+		}
+		if len(items) == 0 {
+			continue
+		}
+		n := len(out) + 1
+		if n > maxDays {
+			break
+		}
+		out = append(out, Day{Day: n, Date: start.AddDate(0, 0, n-1).Format("2006-01-02"), Theme: d.Theme, Items: items})
+	}
+	return out
 }
 
 func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day) {

@@ -28,7 +28,7 @@ export type Place = {
 }
 export type PlanOption = {
   mode: string; transport_usd: number; lodging_usd: number; activities_usd: number
-  total_usd: number; travel_hours: number; value_score: number; why: string
+  total_usd: number; travel_hours: number; value_score: number; why: string; factors: string[]
 }
 export type DayItem = { time: string; title: string; detail?: string; cost_usd: number; category: string }
 export type Day = { day: number; date: string; theme: string; items: DayItem[] }

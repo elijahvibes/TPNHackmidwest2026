@@ -3,6 +3,7 @@ package planner
 import (
 	"context"
 	"testing"
+	"time"
 
 	"trailmix/internal/ai"
 	"trailmix/internal/travel"
@@ -58,8 +59,25 @@ func TestPlanOffline(t *testing.T) {
 	if plan.Options[0].ValueScore < plan.Options[1].ValueScore {
 		t.Error("options not sorted by value")
 	}
-	if plan.RecommendedMode != plan.Options[0].Mode {
-		t.Errorf("recommended %s != best option %s", plan.RecommendedMode, plan.Options[0].Mode)
+	// Recommendation is the highest-value option that fits the budget.
+	var rec *Option
+	for i := range plan.Options {
+		if plan.Options[i].Mode == plan.RecommendedMode {
+			rec = &plan.Options[i]
+		}
+	}
+	if rec == nil {
+		t.Fatalf("recommended mode %q not among options", plan.RecommendedMode)
+	}
+	if rec.TotalUSD > 1500 {
+		for _, o := range plan.Options {
+			if o.TotalUSD <= 1500 {
+				t.Errorf("recommended %s ($%.0f) busts budget while %s ($%.0f) fits", rec.Mode, rec.TotalUSD, o.Mode, o.TotalUSD)
+			}
+		}
+	}
+	if !plan.UnderBudget && rec.TotalUSD <= 1500 {
+		t.Error("under_budget flag disagrees with total")
 	}
 }
 
@@ -73,6 +91,49 @@ func TestPlanForcedMode(t *testing.T) {
 	}
 	if plan.RecommendedMode != "fly" {
 		t.Errorf("forced fly, got %s", plan.RecommendedMode)
+	}
+}
+
+func TestPickHotelHonorsBudget(t *testing.T) {
+	hotels := []travel.HotelQuote{
+		{Name: "Value", Rating: 4.0, TotalUSD: 300},
+		{Name: "Fancy", Rating: 4.8, TotalUSD: 900},
+		{Name: "Cheap", Rating: 3.2, TotalUSD: 180},
+	}
+	if got := pickHotel(hotels, 1000)[0].Name; got != "Fancy" {
+		t.Errorf("big budget should pick best rated, got %s", got)
+	}
+	if got := pickHotel(hotels, 350)[0].Name; got != "Value" {
+		t.Errorf("mid budget should pick best rated that fits, got %s", got)
+	}
+	if got := pickHotel(hotels, 100)[0].Name; got != "Cheap" {
+		t.Errorf("tiny budget should pick cheapest, got %s", got)
+	}
+	if got := pickHotel(hotels, 0)[0].Name; got != "Value" {
+		t.Errorf("no budget should keep order, got %s", got)
+	}
+}
+
+func TestSanitizeDays(t *testing.T) {
+	start, _ := time.Parse("2006-01-02", "2026-11-06")
+	in := []Day{
+		{Day: 9, Date: "bogus", Theme: "A", Items: []DayItem{{Time: "9am", Title: "Thing", Category: "weird", CostUSD: -5}}},
+		{Day: 2, Theme: "empty", Items: nil},
+		{Day: 3, Theme: "B", Items: []DayItem{{Time: "10:00", Title: "", Category: "food"}, {Time: "11:00", Title: "Lunch", Category: "food", CostUSD: 20}}},
+	}
+	out := sanitizeDays(in, start, 2)
+	if len(out) != 2 {
+		t.Fatalf("want 2 days, got %d", len(out))
+	}
+	if out[0].Day != 1 || out[0].Date != "2026-11-06" || out[1].Day != 2 || out[1].Date != "2026-11-07" {
+		t.Errorf("days not renumbered: %+v", out)
+	}
+	it := out[0].Items[0]
+	if it.Category != "activity" || it.CostUSD != 0 || it.Time != "--:--" {
+		t.Errorf("item not sanitized: %+v", it)
+	}
+	if len(out[1].Items) != 1 || out[1].Items[0].Title != "Lunch" {
+		t.Errorf("empty-title item not dropped: %+v", out[1].Items)
 	}
 }
 

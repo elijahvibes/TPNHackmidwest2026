@@ -1,6 +1,9 @@
 services:
+  # Local Postgres for dev only. In prod we use the Akamai (Linode) Managed Database:
+  # set DATABASE_URL in .env and this service is simply not started.
   db:
     image: postgres:16-alpine
+    profiles: ["local"]
     environment:
       POSTGRES_USER: trailmix
       POSTGRES_PASSWORD: trailmix
@@ -15,21 +18,19 @@ services:
       timeout: 3s
       retries: 10
 
-  # Full app image (Go API + built frontend). Used on the Linode box.
-  # For local dev you usually run `go run ./cmd/api` and `npm run dev` instead.
+  # Full app image (Go API + built frontend). This is what runs on the Linode.
+  #   docker compose --profile prod up -d --build
+  # DATABASE_URL comes from .env (Akamai managed DB, sslmode=require).
   app:
     build: .
     profiles: ["prod"]
     env_file: .env
     environment:
-      DATABASE_URL: postgres://trailmix:trailmix@db:5432/trailmix?sslmode=disable
       STATIC_DIR: /app/public
       PORT: "8080"
+      CORS_ORIGIN: ""
     ports:
       - "80:8080"
-    depends_on:
-      db:
-        condition: service_healthy
     restart: unless-stopped
 
 volumes:

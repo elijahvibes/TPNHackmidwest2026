@@ -198,30 +198,45 @@ Rule: nobody starts a P2 while a P0 is red.
 
 ---
 
-## 5. Suggested schedule
+## 5. Schedule: everything ships today
 
-Assumes a two-day hackathon window and four people. Adjust names and hours to the real schedule.
+One day. Split the work by what blocks on outside input (keys, sponsor access, a Linode account) and
+what does not. The "no-input" column is being worked by Claude in this session; humans own the
+"needs a human" column, which is almost entirely getting access and deploying.
 
-### Day 1
+### Needs a human (do these first, they unblock everything)
 
-| Block | Person 1 (infra/AI) | Person 2 (backend/data) | Person 3 (frontend) | Person 4 (payments/QA) |
-|---|---|---|---|---|
-| Hour 0–1 | Everyone: clone, run locally, read this doc. A1 together. | | | |
-| Hour 1–3 | A2, A3 (first deploy) | C1, C3, C4 (keys in, live data) | E1 with P2, then F2 | G1 (sponsor table), H1 |
-| Hour 3–6 | B1, B2 (AI live on Akamai) | D1, D2 | F1 (map) | G2 |
-| Hour 6–9 | B3, B4 (prompt hardening) | C2 or C6 | F3 | G4 |
-| Hour 9–12 | A4, A5 | D6 tests, C7 cache | F6, F4 | H2 smoke on prod |
-| Checkpoint | **Deployed, AI-written plan with live prices, booking via Jack Henry sandbox.** | | | |
+| Order | Task | Who | Minutes |
+|---|---|---|---|
+| 1 | **Sponsor tables**: Akamai inference endpoint + key; Jack Henry sandbox URL, auth, "create payment" docs (B1, G1) | ____ | 30 |
+| 2 | **Keys**: Amadeus Self-Service, Mapbox, Google Places (New), EIA. Paste into a shared note and into `.env` (C1, C3, C4, C5) | ____ | 30 |
+| 3 | **Linode**: create Ubuntu 24.04 2 GB instance, `apt install docker.io docker-compose-v2 git`, clone repo, copy `.env` (A2) | ____ | 30 |
+| 4 | First deploy: `docker compose --profile prod up -d --build` on the Linode, open `http://<ip>` (A3) | same | 20 |
+| 5 | Run `.\scripts\dev-db.ps1` (Windows) or `docker compose up -d db` locally so you can test accounts (A1) | everyone | 10 |
+| 6 | Once G1 docs are in hand: adapt `payments/jackhenry.go` with Claude (G2), test a charge (G4) | ____ | 60 |
+| 7 | Rehearse the demo twice (H3), record the video, submit (H5) | all | 90 |
 
-### Day 2
+### No outside input needed (in progress now)
 
-| Block | Person 1 | Person 2 | Person 3 | Person 4 |
-|---|---|---|---|---|
-| Hour 0–3 | B5 or B7 | D4 (overnight stops) | F5 share link, F7 | G3, G5 |
-| Hour 3–5 | Bug bash from H2 results; freeze features | | | H3 rehearsal |
-| Hour 5–6 | H5 submission, video | | | H4 backup laptop |
+| Task | What changes |
+|---|---|
+| A1 | `scripts/dev-db.ps1`: portable Postgres, no Docker, no admin |
+| E1 | End-to-end account → trip → plan → book verified against real Postgres |
+| H1 | `go run ./cmd/seed`: demo user + planned trips |
+| H2 | `scripts/smoke.sh`: hits every endpoint, green or red |
+| B3, B4 | JSON repair pass + server-side validation so the model can never 500 a plan |
+| D1, D2 | Hotel choice honors budget; every option carries a "why" breakdown |
+| F2 | Live step log while planning |
+| F3 | Side-by-side value breakdown in the UI |
+| A5 | `scripts/deploy.sh` for the Linode: pull, rebuild, restart |
+| F6 | Clear states for DB down / AI down / over budget |
 
-Feature freeze two hours before submission. After that: bugs, copy, rehearsal only.
+### Cut for today
+
+D4 overnight stops, B7 streaming, C2 airport lookup (hard-coded map covers the demo cities), C6 route-geometry stops,
+F5 share link, G6 webhooks, E2–E4 profile/vehicle/edit. Revisit only if everything above is green.
+
+**Feature freeze two hours before submission.** After that: bugs, copy, rehearsal.
 
 ---
 

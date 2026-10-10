@@ -15,8 +15,22 @@ Requirements: Go 1.24+, Node 20+, Docker (for Postgres).
 
 ```bash
 cp .env.example .env          # fill in any keys you have; everything else mocks itself
-docker compose up -d db       # Postgres on :5432
 ```
+
+Postgres, pick one:
+
+```bash
+docker compose --profile local up -d db     # Docker
+```
+
+```powershell
+.\scripts\dev-db.ps1                        # Windows, no Docker: portable Postgres in .pg/
+```
+
+Or point `DATABASE_URL` at the team's Akamai Managed Database (see `.env.example`; add your IP to its access list).
+
+Demo data: `cd server && go run ./cmd/seed` creates `demo@trailmix.app` / `demo1234` with two planned trips.
+Smoke test: `scripts/smoke.sh [base-url]` exercises every endpoint.
 
 Backend (terminal 1):
 
@@ -68,13 +82,14 @@ One Linode (a 2 GB shared instance is enough for the app; the model runs elsewhe
 ```bash
 # on the Linode (Ubuntu)
 apt update && apt install -y docker.io docker-compose-v2 git
-git clone <this repo> trailmix && cd trailmix
-cp .env.example .env && nano .env       # JWT_SECRET, AI_BASE_URL, keys…
+git clone https://github.com/elijahvibes/TPNHackmidwest2026.git trailmix && cd trailmix
+cp .env.example .env && nano .env       # DATABASE_URL (Akamai managed DB), JWT_SECRET, AI_BASE_URL, keys…
 docker compose --profile prod up -d --build
 ```
 
-That builds the UI, compiles the Go binary, and serves both on port 80 with Postgres alongside.
-Point a domain at the Linode IP and put Caddy or Nginx in front for TLS if there is time.
+That builds the UI, compiles the Go binary, and serves both on port 80. The database is the
+Akamai Managed Database; add the Linode's IP to its access controls first. Redeploys: `./scripts/deploy.sh`.
+Point a domain at the Linode IP and put Caddy in front for TLS if there is time.
 
 **AI on Akamai**: set `AI_BASE_URL` to your Akamai Inference Cloud endpoint (OpenAI-compatible, ends in `/v1`)
 plus `AI_API_KEY` and `AI_MODEL`. Alternative: a Linode GPU instance running `ollama serve` with
