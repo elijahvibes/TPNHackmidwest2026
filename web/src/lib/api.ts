@@ -46,10 +46,15 @@ export type DriveEstimate = {
   fuel_cost_usd: number; round_trip_usd: number; vehicle_mpg: number; source: string
 }
 export type Place = {
-  name: string; category: string; categories?: string[]; rating: number; price_usd: number; price_unknown?: boolean; location: LatLng; note?: string; source: string
+  name: string; category: string; categories?: string[]; rating: number; price_usd: number; price_unknown?: boolean
+  /** price_usd is a typical-price estimate (category table or AI Curator), not from the provider */
+  price_estimated?: boolean
+  location: LatLng; note?: string; source: string
 }
 export type PlanOption = {
   mode: string; transport_usd: number; lodging_usd: number; activities_usd: number
+  /** getting around at the destination, estimated and included in total_usd */
+  local_usd?: number
   total_usd: number; travel_hours: number; value_score: number; why: string; factors: string[]
 }
 export type DayWeather = { date: string; label: string; high_f: number; low_f: number; short: string; precip_pct: number; icon: string }
@@ -64,6 +69,13 @@ export type Research = {
   place_notes?: { name: string; note: string }[]; source: string
 }
 export type AgentReport = { agent: string; status: 'ok' | 'skipped' | 'failed'; summary: string; notes?: string[] }
+/** One milestone of a background planning job. */
+export type JobEvent = { at: string; stage: string; message: string; agent?: string; status?: string }
+export type PlanJob = {
+  id: string; status: 'running' | 'done' | 'error'; stage: string; events: JobEvent[]
+  /** latest draft while running; the final plan when done */
+  plan?: Plan; final: boolean; error?: string; trip_id?: string
+}
 
 export type Plan = {
   title: string; summary: string; recommended_mode: string; options: PlanOption[]
@@ -150,6 +162,11 @@ export const api = {
     request<Placemark[]>('GET', `/geo/suggest?q=${encodeURIComponent(q)}`, undefined, signal),
 
   planPreview: (req: PlanRequest) => request<Plan>('POST', '/plan/preview', req),
+  /** Background planning: start, then poll planJob until status is done. */
+  startPreview: (req: PlanRequest) => request<{ job_id: string }>('POST', '/plan/preview/start', req),
+  startTripPlan: (id: string, extra?: PlanExtra) =>
+    request<{ job_id: string; trip_id: string }>('POST', `/trips/${id}/plan/start`, extra ?? {}),
+  planJob: (jobId: string) => request<PlanJob>('GET', `/plan/jobs/${jobId}`),
   selectPreviewFlight: (plan: Plan, flight_index: number, return_token?: string) =>
     request<Plan>('POST', '/plan/flight', { plan, flight_index, return_token }),
   returnFlights: (search: FlightSearch) => request<FlightQuote[]>('POST', '/flights/returns', search),
@@ -194,12 +211,13 @@ export function chooseHotelLocally(plan: Plan, name: string): Plan {
   const h = plan.hotels[idx]
   const hotels = [h, ...plan.hotels.filter((_, i) => i !== idx)]
   const options = plan.options.map(o => {
-    const total = Math.round((o.transport_usd + h.total_usd + o.activities_usd) * 100) / 100
+    const total = Math.round((o.transport_usd + h.total_usd + o.activities_usd + (o.local_usd ?? 0)) * 100) / 100
     const perNight = total / plan.nights
     return {
       ...o, lodging_usd: h.total_usd, total_usd: total,
       value_score: Math.round((10000 / (perNight + 50) - o.travel_hours * 0.6) * 10) / 10,
       factors: o.factors.map(f => f.endsWith('per night all-in') ? `$${perNight.toFixed(0)} per night all-in`
+        : f.includes('per night all-in (estimates included)') ? `$${perNight.toFixed(0)} per night all-in (estimates included)`
         : f.includes('/night') ? `${h.name} ★${h.rating.toFixed(1)} at $${h.nightly_usd.toFixed(0)}/night` : f),
     }
   })

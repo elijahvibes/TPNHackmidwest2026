@@ -141,12 +141,15 @@ func (d *Deps) deleteTrip(w http.ResponseWriter, r *http.Request) {
 }
 
 // planTrip runs the planner for a saved trip and stores the result.
-func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
+// tripPlanRequest loads the trip and builds the planner request from the saved
+// trip plus the posted preferences. It writes the error response itself and
+// returns ok=false when it did.
+func (d *Deps) tripPlanRequest(w http.ResponseWriter, r *http.Request) (t Trip, req planner.Request, ok bool) {
 	c := auth.FromContext(r.Context())
 	t, err := d.tripByID(r, chi.URLParam(r, "id"), c.UserID)
 	if err != nil {
 		httpx.Error(w, 404, "trip not found")
-		return
+		return t, req, false
 	}
 	var extra struct {
 		VehicleMPG          float64        `json:"vehicle_mpg"`
@@ -160,7 +163,7 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil && r.ContentLength != 0 {
 		if err := httpx.Decode(r, &extra); err != nil {
 			httpx.Error(w, 400, "invalid planning preferences")
-			return
+			return t, req, false
 		}
 		if extra.Mode == "drive" || extra.Mode == "fly" || extra.Mode == "auto" {
 			t.Mode = extra.Mode
@@ -170,7 +173,7 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 		var previous planner.Plan
 		if err := json.Unmarshal(t.Plan, &previous); err != nil {
 			httpx.Error(w, 500, "could not read saved planning preferences")
-			return
+			return t, req, false
 		}
 		if extra.LocalTransport == "" {
 			extra.LocalTransport = previous.LocalTransport
@@ -182,7 +185,7 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 			extra.Interests = previous.Interests
 		}
 	}
-	req := planner.Request{
+	req = planner.Request{
 		Origin: t.Origin, Destination: t.Destination, StartDate: t.StartDate, EndDate: t.EndDate,
 		Travelers: t.Travelers, Mode: t.Mode, VehicleMPG: extra.VehicleMPG, Interests: extra.Interests,
 		LocalTransport: extra.LocalTransport, ActivityRadiusMiles: extra.ActivityRadiusMiles,
@@ -216,6 +219,16 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 				req.VehicleMPG = drive.Drive.VehicleMPG
 			}
 		}
+	}
+	return t, req, true
+}
+
+// planTrip prices and plans a saved trip synchronously. The browser now uses
+// startTripPlan + polling instead, but this stays for scripts and tests.
+func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
+	t, req, ok := d.tripPlanRequest(w, r)
+	if !ok {
+		return
 	}
 	plan, err := d.Planner.Plan(r.Context(), req)
 	if err != nil {

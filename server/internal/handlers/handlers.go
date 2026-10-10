@@ -47,6 +47,8 @@ func Mount(r chi.Router, d *Deps) {
 
 	// No login needed: the landing-page demo uses all of these.
 	r.Post("/plan/preview", d.planPreview)
+	r.Post("/plan/preview/start", d.startPreview) // background job; poll /plan/jobs/{id}
+	r.Get("/plan/jobs/{id}", d.planJobStatus)
 	r.Post("/plan/flight", d.selectPreviewFlight)
 	r.Post("/flights/returns", d.returnFlights)
 	r.Post("/flights/bookings", d.flightBookings)
@@ -71,7 +73,8 @@ func Mount(r chi.Router, d *Deps) {
 		r.Get("/trips/{id}", d.getTrip)
 		r.Delete("/trips/{id}", d.deleteTrip)
 		r.Post("/trips/{id}/plan", d.planTrip)
-		r.Post("/trips/{id}/hotel", d.chooseHotel) // swap the stay, re-total the plan
+		r.Post("/trips/{id}/plan/start", d.startTripPlan) // background job; saves on completion
+		r.Post("/trips/{id}/hotel", d.chooseHotel)        // swap the stay, re-total the plan
 		r.Post("/trips/{id}/flight", d.selectTripFlight)
 
 		r.Get("/payments", d.listPayments)

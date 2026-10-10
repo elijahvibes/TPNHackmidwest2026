@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isMockPayment, planDataWarnings, planRealData } from '../src/lib/dataWarnings.ts'
+import { isMockPayment, planDataWarnings, planEstimates, planRealData } from '../src/lib/dataWarnings.ts'
 
 function livePlan() {
   return {
@@ -14,10 +14,19 @@ test('no warning for live sources without static or estimated data', () => {
   assert.deepEqual(planDataWarnings(livePlan()), [])
 })
 
-test('destination transport remains unquoted even with real providers', () => {
+test('destination transport is an estimate, disclosed but not a warning', () => {
   const plan = {...livePlan(), local_transport: 'rental_car', activity_radius_miles: 50}
-  assert.ok(planDataWarnings(plan).some(w => w.includes('local fuel costs are excluded')))
+  assert.deepEqual(planDataWarnings(plan), [])
+  assert.ok(planEstimates(plan).some(w => w.startsWith('Getting around (rental car)') && w.includes('included in the total')))
   assert.ok(!planRealData(plan).some(w => w.startsWith('Destination transportation')))
+})
+
+test('estimated place prices are disclosed with their count', () => {
+  const plan = livePlan()
+  plan.activities = [{ source: 'geoapify', price_estimated: true, price_usd: 18 }, { source: 'geoapify', price_estimated: true, price_usd: 0 }]
+  plan.food = [{ source: 'google', price_usd: 25 }]
+  assert.deepEqual(planDataWarnings(plan), [])
+  assert.ok(planEstimates(plan).some(w => w.startsWith('Place prices: 2 of 3 places use typical prices')))
 })
 
 test('mixed live/mock places are detected even when the summary source is Google', () => {
@@ -28,7 +37,7 @@ test('mixed live/mock places are detected even when the summary source is Google
   const warnings = planDataWarnings(plan)
   assert.ok(warnings.includes('Restaurants: mock data is being used.'))
   assert.ok(warnings.includes('Rest stops: mock data is being used.'))
-  assert.ok(warnings.some(w => w.startsWith('Place costs:')))
+  assert.ok(planEstimates(plan).some(w => w.startsWith('Place costs:')))
   assert.ok(!warnings.some(w => w === 'Attractions: mock data is being used.'))
 })
 
@@ -51,9 +60,23 @@ test('fallback gas, estimated route, mock weather, static safety and rule-based 
   plan.safety = { source: 'national average (city not in table)' }
   plan.ai_generated = false
   const warnings = planDataWarnings(plan)
-  for (const prefix of ['Driving route:', 'Gas price:', 'Weather:', 'Safety:', 'Itinerary:']) {
+  for (const prefix of ['Gas price:', 'Weather:', 'Safety:', 'Itinerary:']) {
     assert.ok(warnings.some(w => w.startsWith(prefix)), prefix)
   }
+  // A great-circle route is an estimate, not fake data.
+  assert.ok(!warnings.some(w => w.startsWith('Driving route:')))
+  assert.ok(planEstimates(plan).some(w => w.startsWith('Driving distance and time: straight-line estimate')))
+})
+
+test('free live sources are credited as real data', () => {
+  const plan = livePlan()
+  plan.sources.route = 'osrm'
+  plan.sources.safety = 'fbi-cde'
+  plan.safety = { source: 'fbi-cde (live, CO statewide 2025)' }
+  assert.deepEqual(planDataWarnings(plan), [])
+  const real = planRealData(plan)
+  assert.ok(real.some(w => w.startsWith('Driving distance and travel time: OSRM')))
+  assert.ok(real.some(w => w.startsWith('Safety: FBI Crime Data Explorer')))
 })
 
 test('old plans without weather or safety still detect summary-only mock sources', () => {
@@ -124,5 +147,5 @@ test('Geoapify real locations are disclosed without claiming ratings or prices',
   const real = planRealData(plan)
   assert.ok(real.some(w => w.includes('Attractions: 1 of 2 places from Geoapify / OpenStreetMap')))
   assert.ok(planDataWarnings(plan).includes('Attractions: mock data is being used.'))
-  assert.ok(planDataWarnings(plan).some(w => w.includes('prices are unknown and excluded from totals')))
+  assert.ok(planEstimates(plan).some(w => w.includes('no price and count as $0')))
 })

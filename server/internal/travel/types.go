@@ -84,13 +84,14 @@ type DriveEstimate struct {
 }
 
 type Place struct {
-	Name         string   `json:"name"`
-	Category     string   `json:"category"` // attraction | food | rest_stop | scenic
-	Categories   []string `json:"categories,omitempty"`
-	Rating       float64  `json:"rating"`
-	PriceUSD     float64  `json:"price_usd"` // estimated per person, 0 = free
-	PriceUnknown bool     `json:"price_unknown,omitempty"`
-	Location     LatLng   `json:"location"`
-	Note         string   `json:"note,omitempty"`
-	Source       string   `json:"source"`
+	Name           string   `json:"name"`
+	Category       string   `json:"category"` // attraction | food | rest_stop | scenic
+	Categories     []string `json:"categories,omitempty"`
+	Rating         float64  `json:"rating"`
+	PriceUSD       float64  `json:"price_usd"` // estimated per person, 0 = free
+	PriceUnknown   bool     `json:"price_unknown,omitempty"`
+	PriceEstimated bool     `json:"price_estimated,omitempty"` // PriceUSD is a typical-price guess, not from the provider
+	Location       LatLng   `json:"location"`
+	Note           string   `json:"note,omitempty"`
+	Source         string   `json:"source"`
 }

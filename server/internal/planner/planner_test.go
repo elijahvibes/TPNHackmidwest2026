@@ -342,7 +342,7 @@ func TestChooseHotelRetotals(t *testing.T) {
 		if plan.Options[i].LodgingUSD != alt.TotalUSD {
 			t.Errorf("option %s lodging %.0f != %.0f", plan.Options[i].Mode, plan.Options[i].LodgingUSD, alt.TotalUSD)
 		}
-		if plan.Options[i].Factors[0] != fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", plan.Options[i].TotalUSD/float64(plan.Nights)) {
+		if plan.Options[i].Factors[0] != fmt.Sprintf("$%.0f per night all-in (estimates included)", plan.Options[i].TotalUSD/float64(plan.Nights)) {
 			t.Errorf("option subtotal explanation not updated: %v", plan.Options[i].Factors)
 		}
 		if plan.Options[i].Mode == plan.RecommendedMode {

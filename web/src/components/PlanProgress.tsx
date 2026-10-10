@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
+import type { JobEvent } from '../lib/api'
 
 /**
- * Terminal-style step log shown while a plan request is in flight.
+ * Terminal-style log shown while a plan is being built.
  *
- * A real plan takes 60-120 s on the live site: SerpAPI flight + hotel search,
- * places, weather, then two model calls on Akamai (research, then the writer).
- * Steps advance on a realistic schedule (cumulative seconds) so the log keeps
- * moving for the whole wait instead of stalling on the last line after 6 s.
+ * With `events` (from a background planning job) it shows the real milestones
+ * as the server reports them: provider searches, then each AI agent on Akamai.
+ * Without events it falls back to a scheduled script so the log keeps moving.
  */
 const STEPS: { at: number; text: string }[] = [
   { at: 0, text: 'geocoding origin + destination' },
@@ -20,7 +20,12 @@ const STEPS: { at: number; text: string }[] = [
   { at: 80, text: 'AI on Akamai: writing your day-by-day itinerary' },
 ]
 
-export default function PlanProgress({ active }: { active: boolean }) {
+const STAGE_LABEL: Record<string, string> = {
+  search: 'searching real prices', draft: 'draft ready', agents: 'AI agents · curator + researcher',
+  writer: 'AI agents · writer', review: 'AI agents · reviewer', done: 'done', error: 'failed',
+}
+
+export default function PlanProgress({ active, events, stage, compact }: { active: boolean; events?: JobEvent[]; stage?: string; compact?: boolean }) {
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
     if (!active) { setElapsed(0); return }
@@ -30,27 +35,40 @@ export default function PlanProgress({ active }: { active: boolean }) {
   }, [active])
   if (!active) return null
 
-  const n = STEPS.reduce((acc, s, i) => (elapsed >= s.at ? i : acc), 0)
-  const mm = String(Math.floor(elapsed / 60)).padStart(1, '0')
+  const mm = String(Math.floor(elapsed / 60))
   const ss = String(elapsed % 60).padStart(2, '0')
+  const live = events && events.length > 0
+  const shown = live ? events.slice(-(compact ? 4 : 12)) : []
+  const n = STEPS.reduce((acc, s, i) => (elapsed >= s.at ? i : acc), 0)
 
   return (
     <div className="panel p-4 mono text-sm grid gap-1" aria-live="polite">
       <div className="flex items-center justify-between text-[11px] text-muted mb-1">
-        <span>planning · real prices + AI, usually 1–2 min</span>
+        <span>{live ? (STAGE_LABEL[stage ?? ''] ?? 'planning') : 'planning · real prices + AI, usually 1–2 min'}</span>
         <span className="text-dim tabular-nums">{mm}:{ss}</span>
       </div>
-      {STEPS.slice(0, n + 1).map((s, i) => (
+      {live ? shown.map((e, i) => {
+        const last = i === shown.length - 1
+        const color = e.status === 'failed' ? 'text-rose' : last ? 'text-cyan' : 'text-dim'
+        return (
+          <div key={`${e.at}-${i}`} className={color}>
+            <span className="text-accent">{last ? '›' : '✓'}</span> {e.agent ? <span className="text-ink">{agentName(e.agent)}: </span> : null}{e.message}{last && <span className="caret" />}
+          </div>
+        )
+      }) : STEPS.slice(0, n + 1).map((s, i) => (
         <div key={s.text} className={i === n ? 'text-cyan' : 'text-dim'}>
           <span className="text-accent">{i === n ? '›' : '✓'}</span> {s.text}{i === n && <span className="caret" />}
         </div>
       ))}
-      {elapsed >= 100 && (
-        <div className="text-[11px] text-amber mt-1">still working: the model is finishing the itinerary. Hang tight, this is the slow part.</div>
-      )}
-      {elapsed >= 170 && (
-        <div className="text-[11px] text-rose">this is taking longer than usual. If it errors out, try once more.</div>
+      {!live && elapsed >= 100 && (
+        <div className="text-[11px] text-amber mt-1">still working: the model is finishing the itinerary.</div>
       )}
     </div>
   )
+}
+
+function agentName(agent: string): string {
+  const [role, kind] = agent.split(':')
+  const name = role.charAt(0).toUpperCase() + role.slice(1)
+  return kind ? `${name} (${kind})` : name
 }

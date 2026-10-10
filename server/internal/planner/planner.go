@@ -33,6 +33,7 @@ type Request struct {
 	DestLoc             *travel.LatLng `json:"dest_loc,omitempty"`   // from the autocomplete pick
 	LocalTransport      string         `json:"local_transport"`
 	ActivityRadiusMiles float64        `json:"activity_radius_miles"`
+	Progress            Progress       `json:"-"` // optional milestone callback (see Event)
 }
 
 type Option struct {
@@ -40,6 +41,7 @@ type Option struct {
 	TransportUSD  float64  `json:"transport_usd"`
 	LodgingUSD    float64  `json:"lodging_usd"`
 	ActivitiesUSD float64  `json:"activities_usd"`
+	LocalUSD      float64  `json:"local_usd"` // getting around at the destination (estimate)
 	TotalUSD      float64  `json:"total_usd"`
 	TravelHours   float64  `json:"travel_hours"`
 	ValueScore    float64  `json:"value_score"` // higher is better
@@ -118,267 +120,6 @@ type Planner struct {
 	SerpAPI TravelSearch
 	Places  *travel.Places
 	Weather *travel.NWS // nil = mock forecast (tests)
-}
-
-func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
-	if err := normalizeMobility(&req); err != nil {
-		return nil, err
-	}
-	if req.Travelers < 1 {
-		req.Travelers = 1
-	}
-	start, err := time.Parse("2006-01-02", req.StartDate)
-	if err != nil {
-		return nil, fmt.Errorf("bad start_date")
-	}
-	end, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil || end.Before(start) {
-		return nil, fmt.Errorf("bad end_date")
-	}
-	nights := int(end.Sub(start).Hours() / 24)
-	if nights < 1 {
-		return nil, fmt.Errorf("end_date must be after start_date for hotel searches")
-	}
-	if !p.SerpAPI.Enabled() {
-		return nil, fmt.Errorf("%w: SERPAPI_KEY is required for flight and hotel searches", travel.ErrProvider)
-	}
-	stage := time.Now() // per-stage timing, logged so slow providers are visible
-
-	// 1. Where are we going? Any city works: a pinned point from the form
-	// wins, otherwise the name is geocoded (gazetteer → Mapbox → OpenStreetMap).
-	originPlace, err := p.resolve(ctx, req.Origin, req.OriginLoc)
-	if err != nil {
-		return nil, fmt.Errorf("origin: %w", err)
-	}
-	destPlace, err := p.resolve(ctx, req.Destination, req.DestLoc)
-	if err != nil {
-		return nil, fmt.Errorf("destination: %w", err)
-	}
-	origin, dest := originPlace.LatLng, destPlace.LatLng
-
-	// 2. Gather prices. Flight and hotel searches require the configured provider.
-	miles, minutes, routeSrc := p.Geo.Route(ctx, origin, dest)
-	drive := p.Fuel.Drive(ctx, miles, minutes, req.VehicleMPG)
-	// Flights go from the nearest real airport to each place (SerpApi needs IATA
-	// codes), so a town with no airport still gets a fare plus the drive to the terminal.
-	var flights []travel.FlightQuote
-	var originAirport, destAirport *travel.Airport
-	if oa, ok := travel.NearestAirport(origin); ok {
-		if da, ok := travel.NearestAirport(dest); ok && oa.Code != da.Code {
-			originAirport, destAirport = &oa, &da
-			flights, err = p.SerpAPI.Flights(ctx, oa.Code, da.Code, req.StartDate, req.EndDate, req.Travelers)
-			if err != nil {
-				return nil, fmt.Errorf("flight search: %w", err)
-			}
-		}
-	}
-	hotels, err := p.SerpAPI.Hotels(ctx, destPlace.Label, req.StartDate, req.EndDate, nights, req.Travelers)
-	if err != nil {
-		return nil, fmt.Errorf("hotel search: %w", err)
-	}
-	activities := p.activitiesFor(ctx, dest, req.Interests, req.ActivityRadiusMiles)
-	food := p.Places.Explore(ctx, dest, "food", 12, req.ActivityRadiusMiles)
-	weather := p.Weather.Forecast(ctx, dest, destPlace.Label, req.StartDate, req.EndDate)
-	safety := travel.SafetyFor(ctx, destPlace.Name+", "+destPlace.Region)
-
-	// 2b. Agents: the Curator filters the real candidates down to the ones
-	// worth a traveler's time while the Researcher reads up on the destination.
-	// Both run on the Akamai inference service; both are skipped without it.
-	trip := agents.Trip{
-		Destination: destPlace.Label, StartDate: req.StartDate, EndDate: req.EndDate,
-		Travelers: req.Travelers, Interests: req.Interests, LocalTransport: req.LocalTransport,
-		RadiusMiles: req.ActivityRadiusMiles, Weather: weatherLine(weather), SafetyLevel: safety.Level, Center: dest,
-	}
-	var reports []agents.Report
-	var research *agents.Research
-	timing := func(name string) {
-		log.Printf("planner: %s took %.1fs", name, time.Since(stage).Seconds())
-		stage = time.Now()
-	}
-	timing("search (places, flights, hotels, weather)")
-	if p.AI.Enabled() {
-		defer timing("writer + reviewer")
-		var wg sync.WaitGroup
-		var researchRep agents.Report
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			research, researchRep = agents.DoResearch(ctx, p.AI, trip, append(append([]travel.Place{}, activities...), food...))
-		}()
-		curated, curateReps := agents.CurateAll(ctx, p.AI, trip,
-			map[string][]travel.Place{"activities": activities, "food": food},
-			map[string]int{"activities": 8, "food": 6})
-		activities, food = curated["activities"], curated["food"]
-		wg.Wait()
-		reports = append(reports, curateReps...)
-		reports = append(reports, researchRep)
-		if research != nil {
-			keepPlaceNotes(research, activities, food)
-		}
-		timing("curator + researcher")
-	}
-
-	travel.RankFlights(flights)
-	sort.Slice(hotels, func(i, j int) bool {
-		// value = rating per dollar
-		return hotels[i].Rating/hotels[i].NightlyUSD > hotels[j].Rating/hotels[j].NightlyUSD
-	})
-
-	// 3. Score the options.
-	actCost := plannedPlaceCost(activities, food, dest, weather, start, nights, req.Travelers)
-
-	// Hotel choice honors the budget: the best-rated stay that still fits after
-	// the cheapest transport and activities; otherwise the cheapest stay.
-	minTransport := drive.RoundTripUSD
-	for _, f := range flights {
-		if cost := f.PriceUSD * float64(req.Travelers); cost < minTransport {
-			minTransport = cost
-		}
-	}
-	hotels = pickHotel(hotels, req.BudgetUSD-minTransport-actCost, safety.Level == "elevated")
-	lodging := 0.0
-	hotelNote := "no stay found"
-	if len(hotels) > 0 {
-		lodging = hotels[0].TotalUSD
-		hotelNote = fmt.Sprintf("%s ★%.1f at $%.0f/night", hotels[0].Name, hotels[0].Rating, hotels[0].NightlyUSD)
-	}
-
-	driveOpt := Option{
-		Mode: "drive", TransportUSD: drive.RoundTripUSD, LodgingUSD: lodging, ActivitiesUSD: actCost,
-		TravelHours: round1(float64(drive.DurationMin) * 2 / 60),
-	}
-	driveOpt.TotalUSD = round2(driveOpt.TransportUSD + lodging + actCost)
-	driveOpt.Why = fmt.Sprintf("%.0f mi each way, %.1f gal of gas at $%.2f", drive.DistanceMiles, drive.GallonsNeeded, drive.GasPriceUSD)
-	driveOpt.Factors = []string{
-		fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", driveOpt.TotalUSD/float64(nights)),
-		fmt.Sprintf("%.1f h on the road round trip", driveOpt.TravelHours),
-		fmt.Sprintf("gas $%.0f for %d traveler(s), no per-seat cost", drive.RoundTripUSD, req.Travelers),
-		hotelNote,
-	}
-
-	options := []Option{driveOpt}
-	if len(flights) > 0 {
-		f := flights[0]
-		flyOpt := Option{
-			Mode: "fly", TransportUSD: round2(f.PriceUSD * float64(req.Travelers)), LodgingUSD: lodging, ActivitiesUSD: actCost,
-			TravelHours: round1(float64(f.DurationMin+150) * 2 / 60), // + airport time
-		}
-		flyOpt.TotalUSD = round2(flyOpt.TransportUSD + lodging + actCost)
-		flyOpt.Why = fmt.Sprintf("%s %s→%s round trip from $%.0f/person, %s", f.Carrier, f.Origin, f.Destination, f.PriceUSD, stopsLabel(f.Stops))
-		if originAirport != nil && destAirport != nil {
-			// Door to door: the drive to and from each terminal counts too.
-			flyOpt.TravelHours = round1(flyOpt.TravelHours + (originAirport.DistanceMiles+destAirport.DistanceMiles)*2/45)
-		}
-		flyOpt.Factors = []string{
-			fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", flyOpt.TotalUSD/float64(nights)),
-			fmt.Sprintf("%.1f h door to door round trip incl. airport time", flyOpt.TravelHours),
-			fmt.Sprintf("$%.0f/person × %d = $%.0f airfare", f.PriceUSD, req.Travelers, flyOpt.TransportUSD),
-			hotelNote,
-		}
-		if originAirport != nil && originAirport.DistanceMiles > 20 {
-			flyOpt.Factors = append(flyOpt.Factors, fmt.Sprintf("nearest airport %s is %.0f mi from %s", originAirport.Code, originAirport.DistanceMiles, originPlace.Name))
-		}
-		if destAirport != nil && destAirport.DistanceMiles > 20 {
-			flyOpt.Factors = append(flyOpt.Factors, fmt.Sprintf("%s is %.0f mi from %s; add a rental or rideshare", destAirport.Code, destAirport.DistanceMiles, destPlace.Name))
-		}
-		options = append(options, flyOpt)
-	}
-	for i := range options {
-		options[i].ValueScore = valueScore(options[i], nights)
-	}
-	sort.Slice(options, func(i, j int) bool { return options[i].ValueScore > options[j].ValueScore })
-	recommended := options[0]
-	// Best value that still fits the budget beats best value overall.
-	if req.BudgetUSD > 0 && recommended.TotalUSD > req.BudgetUSD {
-		for _, o := range options {
-			if o.TotalUSD <= req.BudgetUSD {
-				recommended = o
-				break
-			}
-		}
-	}
-	if req.Mode == "drive" || req.Mode == "fly" {
-		for _, o := range options {
-			if o.Mode == req.Mode {
-				recommended = o
-			}
-		}
-	}
-
-	stops := make([]travel.Place, 0)
-	if recommended.Mode == "drive" {
-		seen := map[string]bool{}
-		for _, pt := range travel.Interpolate(origin, dest, 2) {
-			for _, s := range p.Places.Nearby(ctx, pt, "rest_stop", 4) {
-				if !seen[s.Name] {
-					seen[s.Name] = true
-					stops = append(stops, s)
-				}
-			}
-		}
-		if p.AI.Enabled() {
-			var rep agents.Report
-			stops, rep = agents.Curate(ctx, p.AI, trip, "stops", stops, 4)
-			reports = append(reports, rep)
-		}
-	}
-
-	plan := &Plan{
-		Title:           fmt.Sprintf("%s → %s", originPlace.Label, destPlace.Label),
-		RecommendedMode: recommended.Mode,
-		Options:         options,
-		Drive:           drive,
-		Flights:         flights,
-		Hotels:          hotels,
-		Stops:           stops,
-		Activities:      activities,
-		Food:            food,
-		TotalUSD:        recommended.TotalUSD,
-		UnderBudget:     req.BudgetUSD <= 0 || recommended.TotalUSD <= req.BudgetUSD,
-		Nights:          nights,
-		OriginLoc:       origin,
-		DestLoc:         dest,
-		OriginPlace:     originPlace,
-		DestPlace:       destPlace,
-		OriginAirport:   originAirport,
-		DestAirport:     destAirport,
-		Sources: map[string]string{
-			"route": routeSrc, "gas": drive.Source, "geocode": destPlace.Source,
-			"flights": "serpapi",
-			"hotels":  "serpapi",
-			"places":  placesSource(activities, food, stops),
-		},
-		Weather:     weather,
-		Safety:      safety,
-		GeneratedAt: time.Now(),
-		Travelers:   req.Travelers, BudgetUSD: req.BudgetUSD,
-		OriginName: req.Origin, DestinationName: req.Destination,
-		LocalTransport: req.LocalTransport, ActivityRadiusMiles: req.ActivityRadiusMiles, Interests: req.Interests,
-		Research: research, Agents: reports,
-	}
-	plan.Sources["weather"] = weather.Source
-	plan.Sources["safety"] = "fbi-ucr"
-	plan.Sources["local_transport"] = "estimate"
-	if research != nil {
-		plan.Sources["research"] = "akamai"
-	}
-
-	// 4. The Writer agent drafts the narrative + daily schedule around the
-	// numbers, the Reviewer audits it against the real data.
-	if p.AI.Enabled() {
-		if err := p.narrate(ctx, req, plan, start); err != nil {
-			log.Printf("planner: ai narration failed, using fallback: %v", err)
-			plan.Agents = append(plan.Agents, agents.Report{Agent: "writer", Status: "failed", Summary: "itinerary fell back to rules: " + err.Error()})
-		} else {
-			plan.AIGenerated = true
-			plan.Sources["ai"] = "akamai"
-			plan.Agents = append(plan.Agents, p.review(ctx, trip, plan)...)
-		}
-	}
-	if !plan.AIGenerated {
-		plan.Summary, plan.Days = fallbackItinerary(req, plan, start)
-	}
-	return plan, nil
 }
 
 // review runs the Reviewer agent over the written itinerary: a deterministic
@@ -503,12 +244,14 @@ func (pl *Plan) ChooseHotel(name string, budget float64) error {
 	for i := range pl.Options {
 		o := &pl.Options[i]
 		o.LodgingUSD = h.TotalUSD
-		o.TotalUSD = round2(o.TransportUSD + o.LodgingUSD + o.ActivitiesUSD)
+		o.TotalUSD = round2(o.TransportUSD + o.LodgingUSD + o.ActivitiesUSD + o.LocalUSD)
 		o.ValueScore = valueScore(*o, pl.Nights)
 		for j := range o.Factors {
 			switch {
 			case strings.HasSuffix(o.Factors[j], "per night all-in"):
 				o.Factors[j] = fmt.Sprintf("$%.0f per night all-in", o.TotalUSD/float64(pl.Nights))
+			case strings.Contains(o.Factors[j], "per night all-in (estimates included)"):
+				o.Factors[j] = fmt.Sprintf("$%.0f per night all-in (estimates included)", o.TotalUSD/float64(pl.Nights))
 			case strings.Contains(o.Factors[j], "per night priced subtotal"):
 				o.Factors[j] = fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", o.TotalUSD/float64(pl.Nights))
 			case strings.Contains(o.Factors[j], "/night"):
@@ -670,7 +413,11 @@ type dayResponse struct {
 // makes one short outline call (summary + which place goes on which day) and
 // then writes every day in parallel; each call is a few hundred tokens. A day
 // whose call fails falls back to the rule-based schedule for that day.
-func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start time.Time) error {
+func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start time.Time, emit Progress) error {
+	if emit == nil {
+		emit = func(Event) {}
+	}
+	emit(Event{Stage: "writer", Message: "Writer is outlining the trip"})
 	assign, summary, err := p.outlineDays(ctx, req, plan, start)
 	if err != nil {
 		return fmt.Errorf("outline: %w", err)
@@ -679,6 +426,7 @@ func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start ti
 	if summary == "" {
 		summary = fallbackSummary
 	}
+	emit(Event{Stage: "writer", Message: fmt.Sprintf("outline done; writing %d days in parallel", plan.Nights+1)})
 
 	days := make([]Day, plan.Nights+1)
 	var wg sync.WaitGroup
@@ -691,9 +439,11 @@ func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start ti
 			if err != nil {
 				log.Printf("planner: writer day %d failed, using rule-based day: %v", i+1, err)
 				days[i] = fallbackDays[i]
+				emit(Event{Stage: "writer", Message: fmt.Sprintf("day %d kept the rule-based schedule (%v)", i+1, err)})
 				return
 			}
 			days[i] = Day{Day: i + 1, Date: date, Theme: assign[i].Theme, Items: items}
+			emit(Event{Stage: "writer", Message: fmt.Sprintf("day %d written: %s", i+1, assign[i].Theme)})
 		}(i)
 	}
 	wg.Wait()

@@ -93,15 +93,16 @@ func Curate(ctx context.Context, c Chat, trip Trip, kind string, cands []travel.
 		list.WriteByte('\n')
 	}
 	system := `You are the Curator agent for a trip planner. You receive a numbered list of REAL places from a map provider and must choose the ones worth a traveler's time. Reply with JSON only:
-{"keep":[{"index":int,"note":string}],"dropped":[{"index":int,"reason":string}]}
-Rules: keep at most the requested number, best first. DROP anything that is not a genuine destination of the requested kind (gas stations, parking lots, offices, schools, cemeteries, generic chain stores, unnamed or administrative entries), near-duplicates and multiple branches of one chain, places that clash with the traveler's interests or group, and places unrealistic to reach with their local transport. Each note is at most 12 words and uses only facts shown in the list; if there are no facts, use an empty string. Never invent a place or an index that is not listed. Never mention prices.`
+{"keep":[{"index":int,"note":string,"price_usd":number}],"dropped":[{"index":int,"reason":string}]}
+Rules: keep at most the requested number, best first. DROP anything that is not a genuine destination of the requested kind (gas stations, parking lots, offices, schools, cemeteries, generic chain stores, unnamed or administrative entries), near-duplicates and multiple branches of one chain, places that clash with the traveler's interests or group, and places unrealistic to reach with their local transport. Each note is at most 12 words and uses only facts shown in the list; if there are no facts, use an empty string; notes never mention prices. price_usd is your best estimate of the typical per-person cost (adult admission, or an average meal with drink), 0 for free places like parks; when the place name tells you nothing, estimate from its category. Never invent a place or an index that is not listed.`
 	tripJSON, _ := json.Marshal(trip)
 	user := fmt.Sprintf("Trip: %s\nKind: %s\nKeep the best %d.\n\n%s", tripJSON, kind, want, list.String())
 
 	var out struct {
 		Keep []struct {
-			Index int    `json:"index"`
-			Note  string `json:"note"`
+			Index    int     `json:"index"`
+			Note     string  `json:"note"`
+			PriceUSD float64 `json:"price_usd"`
 		} `json:"keep"`
 		Dropped []struct {
 			Index  int    `json:"index"`
@@ -125,6 +126,11 @@ Rules: keep at most the requested number, best first. DROP anything that is not 
 		p := cands[k.Index]
 		if n := strings.TrimSpace(k.Note); n != "" && len(n) <= 90 {
 			p.Note = n
+		}
+		// A provider price always wins; the model's estimate only fills gaps
+		// (and refines the category guess) and stays marked as an estimate.
+		if (p.PriceUnknown || p.PriceEstimated) && k.PriceUSD >= 0 && k.PriceUSD <= 400 {
+			p.PriceUSD, p.PriceUnknown, p.PriceEstimated = k.PriceUSD, false, true
 		}
 		kept = append(kept, p)
 	}

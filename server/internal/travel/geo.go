@@ -300,6 +300,20 @@ func (g *Geo) Route(ctx context.Context, from, to LatLng) (miles float64, minute
 			return out.Routes[0].Distance / 1609.34, int(out.Routes[0].Duration / 60), "mapbox"
 		}
 	}
+	// OSRM's public demo server: real road routing, no key, light use only.
+	if !Offline {
+		u := fmt.Sprintf("https://router.project-osrm.org/route/v1/driving/%f,%f;%f,%f?overview=false", from.Lng, from.Lat, to.Lng, to.Lat)
+		var osrm struct {
+			Code   string `json:"code"`
+			Routes []struct {
+				Distance float64 `json:"distance"`
+				Duration float64 `json:"duration"`
+			} `json:"routes"`
+		}
+		if err := g.getJSON(ctx, u, &osrm); err == nil && osrm.Code == "Ok" && len(osrm.Routes) > 0 && osrm.Routes[0].Distance > 0 {
+			return osrm.Routes[0].Distance / 1609.34, int(osrm.Routes[0].Duration / 60), "osrm"
+		}
+	}
 	// Great-circle distance with a road-winding factor; 62 mph average.
 	d := haversineMiles(from, to) * 1.18
 	return d, int(d / 62 * 60), "estimate"

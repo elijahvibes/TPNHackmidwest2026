@@ -23,6 +23,8 @@ func TestAgentsLive(t *testing.T) {
 	if cfg.AIBaseURL == "" || os.Getenv("CI") != "" {
 		t.Skip("AI_BASE_URL not set")
 	}
+	travel.Offline = false // this test wants the real free providers too
+	defer func() { travel.Offline = true }()
 	client := ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel)
 	p := &Planner{
 		AI:      client,

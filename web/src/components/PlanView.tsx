@@ -6,9 +6,9 @@ import CostBreakdown from './CostBreakdown'
 import RouteMap from './RouteMap'
 import { SafetyCard, WeatherStrip } from './WeatherSafety'
 import FlightChooser from './FlightChooser'
-import DataWarning from './DataWarning'
+import DataWarning, { EstimatesNote } from './DataWarning'
 import { AgentsCard, ResearchCard } from './AgentsPanel'
-import { planDataWarnings, planRealData } from '../lib/dataWarnings'
+import { planDataWarnings, planEstimates, planRealData } from '../lib/dataWarnings'
 import { placeMapLink } from '../lib/placeLinks'
 import { destinationTransport, roadStops } from '../lib/transport'
 
@@ -16,7 +16,7 @@ export type PlanMeta = { travelers?: number; budget_usd?: number | null; status?
 
 const MODE_ICON: Record<string, string> = { drive: '🚗', fly: '✈' }
 
-export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan, onSelectFlight, disabled, busy }: {
+export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan, onSelectFlight, disabled, busy, refining }: {
   plan: Plan
   meta?: PlanMeta
   actions?: ReactNode
@@ -25,20 +25,26 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
   onSelectFlight?: (index: number, returnToken?: string) => Promise<void>
   disabled?: boolean
   busy?: boolean
+  /** a draft: real prices are final, the AI agents are still working on places and the itinerary */
+  refining?: boolean
 }) {
   const realData = planRealData(plan)
   const rec = plan.options.find(o => o.mode === plan.recommended_mode) ?? plan.options[0]
   const first = plan.days[0]?.date, last = plan.days[plan.days.length - 1]?.date
   const budget = meta?.budget_usd ?? undefined
-  const budgetLeft = budget ? budget - rec.transport_usd - rec.activities_usd : undefined
+  const budgetLeft = budget ? budget - rec.transport_usd - rec.activities_usd - (rec.local_usd ?? 0) : undefined
   const live = Object.entries(plan.sources).filter(([, v]) => !['mock', 'fallback', 'estimate', 'none'].includes(v)).length
   const [showSources, setShowSources] = useState(false)
   const stops = roadStops(plan)
-  const unknownCosts = !!plan.local_transport || [...plan.activities, ...plan.food, ...stops].some(p => p.price_unknown)
+  const unknownCosts = [...plan.activities, ...plan.food, ...stops].some(p => p.price_unknown)
+  const estimates = planEstimates(plan)
+  // While the AI is still working, "rule-based itinerary" is a transient state, not a warning.
+  const warnings = planDataWarnings(plan).filter(w => !(refining && w.startsWith('Itinerary:')))
 
   return (
     <div className="grid gap-6">
-      <DataWarning details={planDataWarnings(plan)} />
+      <DataWarning details={warnings} />
+      <EstimatesNote details={estimates} />
       <section aria-label="Real provider data" className="rounded-lg border-2 border-accent bg-accent/5 p-5 print:hidden">
         <h2 className="mono text-xl font-bold text-accent">REAL PROVIDER DATA IN THIS PLAN</h2>
         {realData.length > 0 ? (
@@ -70,9 +76,9 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
             </div>
           </div>
           <div className="text-right">
-            <div className="label">{unknownCosts ? 'priced subtotal · unquoted costs excluded' : 'all-in estimate'}</div>
+            <div className="label">{unknownCosts ? 'all-in estimate · some places unpriced' : 'all-in estimate'}</div>
             <div className={`mono text-4xl font-bold tabular-nums ${plan.under_budget ? 'text-accent' : 'text-rose'}`}>{usd(plan.total_usd)}</div>
-            <div className="mono text-[11px] text-muted">{usd(plan.total_usd / Math.max(plan.nights, 1))}/night · {budget ? (plan.under_budget ? 'under budget' : 'over budget') : 'no budget set'}{unknownCosts && ' before unknown costs'}</div>
+            <div className="mono text-[11px] text-muted">{usd(plan.total_usd / Math.max(plan.nights, 1))}/night · {budget ? (plan.under_budget ? 'under budget' : 'over budget') : 'no budget set'}{estimates.length > 0 && ' · includes estimates'}</div>
             {actions && <div className="flex flex-wrap justify-end gap-2 mt-3 print:hidden">{actions}</div>}
           </div>
         </div>
@@ -81,7 +87,9 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
           {plan.local_transport && <span className="tag">getting around: {destinationTransport(plan)} · explore within {plan.activity_radius_miles} miles</span>}
           {plan.ai_generated
             ? <span className="tag text-accent">✦ itinerary by {plan.agents?.length ? `${plan.agents.length} AI agents` : 'AI'} on Akamai</span>
-            : <span className="tag text-amber">itinerary: rule-based (AI offline)</span>}
+            : refining
+              ? <span className="tag text-cyan">✦ draft · AI agents on Akamai are refining this<span className="caret" /></span>
+              : <span className="tag text-amber">itinerary: rule-based (AI offline)</span>}
           <button className="tag hover:text-ink" onClick={() => setShowSources(s => !s)} aria-expanded={showSources}>
             {live}/{Object.keys(plan.sources).length} live data sources {showSources ? '▾' : '▸'}
           </button>
@@ -114,7 +122,7 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
         <p className="text-xs text-muted">
           Powered by <a className="underline" href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a>
           {' · '}© <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.
-          Place prices are unknown and excluded from the total.
+          Place prices marked ~ are typical-price estimates, not provider data.
         </p>
       )}
     </div>
@@ -145,7 +153,9 @@ function Explore({ plan }: { plan: Plan }) {
                     {mapLink && <a href={mapLink} target="_blank" rel="noopener noreferrer" className="text-cyan underline"
                       aria-label={`View map for ${p.name} (opens in a new tab)`}>View map</a>}
                   </span>
-                  <span className="mono text-xs text-muted whitespace-nowrap">{p.price_unknown ? 'price unknown' : p.price_usd ? usd(p.price_usd) : 'free'}</span>
+                  <span className="mono text-xs text-muted whitespace-nowrap" title={p.price_estimated ? 'typical price, estimated' : undefined}>
+                    {p.price_unknown ? 'price unknown' : p.price_usd ? `${p.price_estimated ? '~' : ''}${usd(p.price_usd)}` : p.price_estimated ? '~free' : 'free'}
+                  </span>
                 </li>
               )
             })}
