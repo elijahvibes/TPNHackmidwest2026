@@ -20,6 +20,7 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=api /api /app/api
 COPY --from=web /web/dist /app/public
-ENV PORT=8080 STATIC_DIR=/app/public
+COPY deploy/akamai-db-ca.crt /app/akamai-db-ca.crt
+ENV PORT=8080 STATIC_DIR=/app/public DATABASE_CA_CERT=/app/akamai-db-ca.crt
 EXPOSE 8080
 CMD ["/app/api"]

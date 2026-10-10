@@ -4,16 +4,22 @@ package db
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"embed"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 )
 
 //go:embed migrations/*.sql
@@ -35,13 +41,60 @@ func DSN(raw string) (string, error) {
 	}
 	pass, _ := u.User.Password()
 	name := strings.TrimPrefix(u.Path, "/")
-	tls := "false"
+	tlsMode := "false"
 	if m := u.Query().Get("ssl-mode"); m != "" && !strings.EqualFold(m, "DISABLED") {
-		// Managed DBs use a private CA; skip-verify keeps encryption without cert pinning.
-		tls = "skip-verify"
+		tlsMode = tlsConfigName()
 	}
 	return fmt.Sprintf("%s:%s@tcp(%s)/%s?tls=%s&parseTime=true&multiStatements=true&charset=utf8mb4&loc=UTC",
-		u.User.Username(), pass, u.Host, name, tls), nil
+		u.User.Username(), pass, u.Host, name, tlsMode), nil
+}
+
+// caCandidates are where the Akamai Managed Database CA is looked for when
+// DATABASE_CA_CERT is unset: the Docker image, then the repo (run from
+// server/ or the root).
+var caCandidates = []string{
+	"/app/akamai-db-ca.crt",
+	filepath.Join("deploy", "akamai-db-ca.crt"),
+	filepath.Join("..", "deploy", "akamai-db-ca.crt"),
+}
+
+var (
+	tlsOnce sync.Once
+	tlsName string
+)
+
+// tlsConfigName registers the managed database's CA with the driver (once)
+// and returns the tls= value to use. With the CA the server certificate is
+// fully verified; without it we fall back to encrypted-but-unverified so a
+// missing file never takes the app down.
+func tlsConfigName() string {
+	tlsOnce.Do(func() {
+		tlsName = "skip-verify"
+		paths := caCandidates
+		if p := os.Getenv("DATABASE_CA_CERT"); p != "" {
+			paths = []string{p}
+		}
+		for _, p := range paths {
+			pem, err := os.ReadFile(p)
+			if err != nil {
+				continue
+			}
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(pem) {
+				log.Printf("db: %s is not a PEM certificate; using skip-verify", p)
+				return
+			}
+			if err := mysql.RegisterTLSConfig("akamai", &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}); err != nil {
+				log.Printf("db: register TLS config: %v; using skip-verify", err)
+				return
+			}
+			log.Printf("db: verifying server certificate against %s", p)
+			tlsName = "akamai"
+			return
+		}
+		log.Printf("db: no CA certificate found (set DATABASE_CA_CERT); using skip-verify")
+	})
+	return tlsName
 }
 
 // Connect opens a pool, pings, and applies every migrations/*.sql in name
