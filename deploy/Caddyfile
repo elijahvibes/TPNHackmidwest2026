@@ -1,0 +1,15 @@
+# Caddy fronts the app on the Linode: automatic HTTPS via Let's Encrypt.
+#
+# SITE_HOST comes from .env (default: the sslip.io name for the server IP, which
+# needs no DNS setup). When a real domain is pointed at the Linode, set
+# SITE_HOST=yourdomain.com in .env and redeploy; Caddy fetches the cert itself.
+
+{$SITE_HOST:50-116-22-198.sslip.io} {
+	encode zstd gzip
+	reverse_proxy app:8080
+}
+
+# Plain HTTP on the bare IP keeps working too.
+http://50.116.22.198 {
+	reverse_proxy app:8080
+}

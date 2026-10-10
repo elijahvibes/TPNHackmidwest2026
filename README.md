@@ -87,10 +87,14 @@ scp .env.linode <linode>:trailmix/.env     # from a laptop that has it; then add
 docker compose --profile prod up -d --build
 ```
 
-That builds the UI, compiles the Go binary, and serves both on port 80. The database is the
-Akamai Managed MySQL; the Linode must be in the same region/VLAN for the `private-` host, or add the
-Linode's IP to the database's access controls and use the public host. Redeploys: `./scripts/deploy.sh`.
-Point a domain at the Linode IP and put Caddy in front for TLS if there is time.
+That builds the UI, compiles the Go binary, and serves both behind Caddy with automatic HTTPS at
+`https://50-116-22-198.sslip.io` (an `sslip.io` name resolves to the IP it encodes, so no DNS setup).
+Plain `http://50.116.22.198` keeps working. For a real domain: point its A record at the Linode,
+set `SITE_HOST=yourdomain.com` in `.env`, redeploy; Caddy fetches the certificate itself.
+
+The database is the Akamai Managed MySQL; the Linode must be in the same region/VLAN for the
+`private-` host, or add the Linode's IP to the database's access controls and use the public host.
+Redeploys from a laptop: `scripts/ship.sh` (the repo is private, so it uploads the tree instead of `git pull`).
 
 **AI on Akamai**: set `AI_BASE_URL` to your Akamai Inference Cloud endpoint (OpenAI-compatible, ends in `/v1`)
 plus `AI_API_KEY` and `AI_MODEL`. Alternative: a Linode GPU instance running `ollama serve` with
