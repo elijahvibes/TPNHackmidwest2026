@@ -46,7 +46,7 @@ func main() {
 			AI:      ai.New(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel),
 			Geo:     travel.NewGeo(cfg.MapboxToken),
 			Fuel:    fuel,
-			Amadeus: travel.NewAmadeus(cfg.AmadeusKey, cfg.AmadeusSecret),
+			SerpAPI: travel.NewSerpAPI(cfg.SerpAPIKey),
 			Places:  travel.NewPlaces(cfg.PlacesKey),
 		},
 		Payments: payments.NewJackHenry(cfg.JackHenryBaseURL, cfg.JackHenryKey),
@@ -69,8 +69,11 @@ func main() {
 		r.NotFound(spaHandler(cfg.StaticDir))
 	}
 
-	log.Printf("trailmix api listening on :%s (ai=%v amadeus=%v payments=%v static=%q)",
-		cfg.Port, deps.Planner.AI.Enabled(), deps.Planner.Amadeus.Enabled(), deps.Payments.Live(), cfg.StaticDir)
+	if !deps.Planner.SerpAPI.Enabled() {
+		log.Println("WARN: SERPAPI_KEY not set; trip planning is unavailable")
+	}
+	log.Printf("trailmix api listening on :%s (ai=%v serpapi=%v payments=%v static=%q)",
+		cfg.Port, deps.Planner.AI.Enabled(), deps.Planner.SerpAPI.Enabled(), deps.Payments.Live(), cfg.StaticDir)
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r, ReadHeaderTimeout: 10 * time.Second}
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)

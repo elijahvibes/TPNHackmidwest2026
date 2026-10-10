@@ -14,13 +14,17 @@ server/   Go API (chi + pgx), serves the built UI in production
 Requirements: Go 1.24+, Node 20+, Docker (for Postgres).
 
 ```bash
-cp .env.example .env          # fill in any keys you have; everything else mocks itself
+cp .env.example .env          # set SERPAPI_KEY, DATABASE_URL and JWT_SECRET
 docker compose up -d db       # Postgres on :5432
 ```
 
 Backend (terminal 1):
 
 ```bash
+# From the repository root; the Go server does not load .env automatically.
+set -a
+source .env
+set +a
 cd server && go run ./cmd/api
 ```
 
@@ -39,7 +43,7 @@ in PowerShell before `go run`, or just set the variables you need.
 
 | Method | Path | Auth | What |
 |---|---|---|---|
-| GET | `/api/health` | no | which integrations are live |
+| GET | `/api/health` | no | database availability and which integrations are configured |
 | POST | `/api/auth/register` `/login` | no | returns a JWT |
 | GET/PATCH | `/api/auth/me` | yes | profile; PATCH stores home geolocation |
 | GET | `/api/vehicles/mpg?year&make&model` | yes | combined MPG from fueleconomy.gov |
@@ -53,13 +57,73 @@ in PowerShell before `go run`, or just set the variables you need.
 
 1. Geocode origin and destination (browser GPS, built-in gazetteer, or Mapbox).
 2. Fetch in parallel-friendly steps: driving route + gas cost (EIA price × your car's MPG), round-trip
-   flights (Amadeus), hotels near the destination (Amadeus), attractions and food (Google Places),
+   flights and hotels (SerpApi Google Flights / Google Hotels), attractions and food (Google Places),
    rest stops interpolated along the route.
 3. Score `drive` vs `fly`: `value = 10000 / (cost per night + 50) − 0.6 × travel hours`.
 4. Hand the real numbers to the LLM on Akamai and ask for a day-by-day JSON itinerary.
    Prices are never invented by the model; it only arranges what was fetched.
-5. If any key is missing, that provider returns deterministic mock data and the plan's
-   `sources` map says so, so the demo never breaks.
+5. Flights and hotels require SerpApi and never fall back to mock prices:
+   missing credentials, provider failures or missing priced results return an explicit
+   HTTP 502. Gas, routes and places retain their labeled fallbacks and estimates.
+
+## Real flights and hotels with SerpApi
+
+Amadeus Self-Service was decommissioned in July 2026. Its integration has been replaced
+with [SerpApi](https://serpapi.com), using one server-side `SERPAPI_KEY` for both
+[Google Flights](https://serpapi.com/google-flights-api) and
+[Google Hotels](https://serpapi.com/google-hotels-api).
+
+1. Add `SERPAPI_KEY` to your local `.env`. Never put it in a frontend variable or commit it.
+2. Restart the API with the environment loaded as shown above.
+3. `/api/health` reports `serpapi: true` when the key is configured (not proof of a successful search).
+4. Test without login or Postgres:
+
+```bash
+curl --max-time 120 http://localhost:8080/api/plan/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"origin":"Kansas City","destination":"Chicago","start_date":"2026-11-10","end_date":"2026-11-13","travelers":2,"mode":"fly","budget_usd":2000}'
+```
+
+Successful results have `sources.flights` and `sources.hotels` set to `serpapi`.
+Flight quotes are round-trip prices per traveler; the planner multiplies them by the
+traveler count. Hotels are searched for that guest count and use the returned full-stay
+total rather than multiplying a nightly rate or using an explicitly pre-tax rate.
+All travelers are currently treated as adults.
+
+### Choosing flights
+
+All returned departure options are retained. Recommended order balances price,
+outbound duration and stops: `fare per traveler + $25/hour + $50/connection`
+(lowest score first). This is a transparent ranking heuristic, not an added fee.
+The recommended flight is first and selected by default. The UI offers lowest-price
+and shortest-duration sorts, a nonstop filter, and expandable lists.
+
+Choose a departure, then fetch return options on demand. Selecting a return uses
+the provider's updated round-trip fare and the actual outbound + return duration.
+Trip totals, budget status and the deterministic itinerary update together.
+Saved-trip selections are persisted; booked trips cannot change flights. Older saved
+plans must be re-planned to add selection tokens and traveler metadata.
+
+Booking options are fetched only after return selection. They include seller links,
+fare conditions and baggage information when provided. Google booking actions
+requiring POST are resolved server-side using the opaque provider payload.
+Separate-ticket options are labeled. Following a seller link does not buy a ticket;
+complete and confirm the booking on the seller's site. Jack Henry payment alone
+does not reserve airline tickets.
+
+Endpoints: `POST /api/flights/returns`, `/api/flights/bookings`,
+`/api/plan/flight` (preview selection), and `/api/trips/{id}/flight`
+(authenticated saved selection). Return and booking lookups consume additional
+SerpApi searches when not cached; initial planning still makes only two searches.
+Selection updates the itinerary without another AI call.
+
+These are real Google Travel search results, not bookable or guaranteed quotes.
+Final prices, optional baggage and other fees may differ. Each plan normally needs two
+searches, with SerpApi's default cache enabled (up to one hour). Check
+[current quotas and pricing](https://serpapi.com/pricing) before testing repeatedly.
+Without `SERPAPI_KEY`, trip planning returns an explicit error; there are no mock
+flight or hotel quotes. Existing saved plans are not rewritten and may still contain
+older mock quotes; re-plan them to fetch real prices.
 
 ## Deploy on Akamai / Linode
 
@@ -81,11 +145,11 @@ plus `AI_API_KEY` and `AI_MODEL`. Alternative: a Linode GPU instance running `ol
 `AI_BASE_URL=http://<gpu-ip>:11434/v1` and `AI_MODEL=llama3.1`.
 
 **Jack Henry**: `server/internal/payments/jackhenry.go` posts to `${JACKHENRY_BASE_URL}/payments`.
-Adjust the path and payload to match the sandbox the sponsor hands out. Without it, payments settle in mock mode.
+This is a generic placeholder, not a verified Jack Henry API contract. Without configuration, payments settle in mock mode.
 
 ## Where to get keys (all free)
 
-- Amadeus Self-Service (flights, hotels): https://developers.amadeus.com
+- SerpApi (Google Flights, Google Hotels; limited free tier): https://serpapi.com
 - EIA (weekly US gas price): https://www.eia.gov/opendata/
 - Google Places API (New): https://console.cloud.google.com
 - Mapbox (geocoding, directions): https://account.mapbox.com

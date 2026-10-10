@@ -7,8 +7,7 @@ import (
 )
 
 // Config is read once from the environment at startup. Every external
-// integration is optional: when its key is missing the app falls back to
-// deterministic mock data so the demo never breaks.
+// flight and hotel search requires SERPAPI_KEY; other integrations are optional.
 type Config struct {
 	Port        string
 	DatabaseURL string
@@ -22,11 +21,10 @@ type Config struct {
 	AIModel   string
 
 	// Travel data
-	AmadeusKey    string
-	AmadeusSecret string
-	EIAKey        string
-	PlacesKey     string // Google Places
-	MapboxToken   string
+	SerpAPIKey  string
+	EIAKey      string
+	PlacesKey   string // Google Places
+	MapboxToken string
 
 	// Payments
 	JackHenryBaseURL string
@@ -52,8 +50,7 @@ func Load() Config {
 		AIBaseURL:        env("AI_BASE_URL", ""),
 		AIAPIKey:         env("AI_API_KEY", ""),
 		AIModel:          env("AI_MODEL", "llama-3.1-8b-instruct"),
-		AmadeusKey:       env("AMADEUS_KEY", ""),
-		AmadeusSecret:    env("AMADEUS_SECRET", ""),
+		SerpAPIKey:       env("SERPAPI_KEY", ""),
 		EIAKey:           env("EIA_KEY", ""),
 		PlacesKey:        env("GOOGLE_PLACES_KEY", ""),
 		MapboxToken:      env("MAPBOX_TOKEN", ""),

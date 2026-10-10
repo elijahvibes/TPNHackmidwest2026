@@ -28,6 +28,14 @@ export default function TripView() {
     } catch (e) { setErr((e as Error).message) } finally { setBusy('') }
   }
 
+  const selectFlight = async (index: number, returnToken?: string) => {
+    setBusy('saving flight selection…'); setErr('')
+    try {
+      const plan = await api.selectTripFlight(id, index, returnToken)
+      setTrip(current => current ? { ...current, plan } : current)
+    } finally { setBusy('') }
+  }
+
   if (err && !trip) return <div className="mono text-rose">{err}</div>
   if (!trip) return <div className="mono text-muted">loading…</div>
 
@@ -53,7 +61,7 @@ export default function TripView() {
           {receipt.mock && <span className="text-dim"> · mock mode (set JACKHENRY_BASE_URL to go live)</span>}
         </div>
       )}
-      {trip.plan ? <PlanView plan={trip.plan} /> : (
+      {trip.plan ? <PlanView plan={trip.plan} onSelectFlight={selectFlight} disabled={!!busy || trip.status === 'booked'} /> : (
         <div className="panel p-8 text-center mono text-muted">no plan yet. hit <b className="text-ink">plan</b> to price it.</div>
       )}
     </div>

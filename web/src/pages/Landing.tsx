@@ -16,6 +16,13 @@ export default function Landing() {
     try { setPlan(await api.planPreview(v)) } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
 
+  const selectFlight = async (index: number, returnToken?: string) => {
+    if (!plan) return
+    setBusy(true)
+    try { setPlan(await api.selectPreviewFlight(plan, index, returnToken)) }
+    finally { setBusy(false) }
+  }
+
   return (
     <div className="grid gap-8">
       <section className="pt-6">
@@ -39,7 +46,7 @@ export default function Landing() {
       {err && <div className="mono text-sm text-rose">error: {err}</div>}
       {plan && (
         <>
-          <PlanView plan={plan} />
+          <PlanView plan={plan} onSelectFlight={selectFlight} disabled={busy} />
           {!user && <div className="panel p-4 mono text-sm text-muted">Like it? <Link to="/register" className="text-accent">create an account</Link> to save trips and book with Jack Henry.</div>}
           {user && <div className="panel p-4 mono text-sm text-muted">Save this as a trip from <Link to="/app/new" className="text-accent">+ new</Link>.</div>}
         </>

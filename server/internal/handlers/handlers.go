@@ -40,13 +40,17 @@ func Mount(r chi.Router, d *Deps) {
 			"ok":       true,
 			"db":       d.DB != nil,
 			"ai":       d.Planner.AI.Enabled(),
-			"amadeus":  d.Planner.Amadeus.Enabled(),
+			"serpapi":  d.Planner.SerpAPI.Enabled(),
 			"payments": d.Payments.Live(),
 		})
 	})
 
 	// No login needed: the landing-page demo uses both of these.
 	r.Post("/plan/preview", d.planPreview)
+	r.Post("/plan/flight", d.selectPreviewFlight)
+	r.Post("/flights/returns", d.returnFlights)
+	r.Post("/flights/bookings", d.flightBookings)
+	r.Post("/flights/booking-redirect", resolveFlightBooking)
 	r.Get("/vehicles/mpg", d.vehicleMPG)
 
 	r.Group(func(r chi.Router) {
@@ -65,6 +69,7 @@ func Mount(r chi.Router, d *Deps) {
 		r.Get("/trips/{id}", d.getTrip)
 		r.Delete("/trips/{id}", d.deleteTrip)
 		r.Post("/trips/{id}/plan", d.planTrip)
+		r.Post("/trips/{id}/flight", d.selectTripFlight)
 
 		r.Get("/payments", d.listPayments)
 		r.Post("/payments", d.createPayment)

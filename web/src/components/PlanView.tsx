@@ -1,10 +1,13 @@
 import { hrs, usd, type Plan } from '../lib/api'
+import FlightChooser from './FlightChooser'
 
 const catColor: Record<string, string> = {
   transport: 'text-cyan', lodging: 'text-amber', activity: 'text-accent', food: 'text-rose', stop: 'text-muted',
 }
 
-export default function PlanView({ plan }: { plan: Plan }) {
+export default function PlanView({ plan, onSelectFlight, disabled }: {
+  plan: Plan; onSelectFlight?: (index: number, returnToken?: string) => Promise<void>; disabled?: boolean
+}) {
   const best = plan.options.find(o => o.mode === plan.recommended_mode) ?? plan.options[0]
   return (
     <div className="grid gap-6">
@@ -22,12 +25,15 @@ export default function PlanView({ plan }: { plan: Plan }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 mt-4">
-          <span className="tag">best: <b className="text-accent">{plan.recommended_mode}</b></span>
+          <span className="tag">{plan.flight_selected ? 'selected' : 'best'}: <b className="text-accent">{plan.recommended_mode}</b></span>
           {Object.entries(plan.sources).map(([k, v]) => (
             <span key={k} className="tag">{k}: <span className={v === 'mock' || v === 'fallback' || v === 'estimate' ? 'text-dim' : 'text-cyan'}>{v}</span></span>
           ))}
           {plan.ai_generated && <span className="tag text-accent">✦ itinerary by AI on Akamai</span>}
         </div>
+        {(plan.sources.flights === 'serpapi' || plan.sources.hotels === 'serpapi') && (
+          <p className="text-dim text-xs mt-3">Flight and stay prices are Google Travel search results via SerpApi, not guaranteed booking quotes. Optional fees and final checkout prices may differ.</p>
+        )}
       </section>
 
       {/* value comparison */}
@@ -48,6 +54,8 @@ export default function PlanView({ plan }: { plan: Plan }) {
           </div>
         ))}
       </section>
+
+      {onSelectFlight && <FlightChooser key={plan.generated_at} plan={plan} onSelect={onSelectFlight} disabled={disabled} />}
 
       {/* day by day */}
       <section className="grid gap-3">
@@ -88,9 +96,10 @@ export default function PlanView({ plan }: { plan: Plan }) {
         </div>
         <div className="panel p-4">
           <h4 className="label">flights</h4>
+          <p className="text-dim text-xs mt-1">Round trip per traveler</p>
           <ul className="mono text-sm mt-2 grid gap-1">
-            {plan.flights.slice(0, 3).map((f, i) => (
-              <li key={i} className="flex justify-between"><span>{f.carrier} · {f.stops ? `${f.stops} stop` : 'nonstop'} · {hrs(f.duration_min)}</span><span className="text-accent">{usd(f.price_usd)}</span></li>
+            {plan.flights.slice(plan.selected_flight ?? 0, (plan.selected_flight ?? 0) + 1).map((f, i) => (
+              <li key={i} className="flex justify-between"><span>{f.carrier} · {f.stops ? `${f.stops} stop` : 'nonstop'} · {hrs(f.duration_min)}</span><span className="text-accent">{usd(plan.selected_return?.price_usd ?? f.price_usd)}</span></li>
             ))}
             {plan.flights.length === 0 && <li className="text-dim">no airport match</li>}
           </ul>
