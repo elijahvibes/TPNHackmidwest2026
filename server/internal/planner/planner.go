@@ -18,17 +18,19 @@ import (
 )
 
 type Request struct {
-	Origin      string         `json:"origin"`
-	Destination string         `json:"destination"`
-	StartDate   string         `json:"start_date"` // YYYY-MM-DD
-	EndDate     string         `json:"end_date"`
-	Travelers   int            `json:"travelers"`
-	BudgetUSD   float64        `json:"budget_usd"`
-	Mode        string         `json:"mode"` // auto | drive | fly
-	VehicleMPG  float64        `json:"vehicle_mpg"`
-	Interests   []string       `json:"interests"`
-	OriginLoc   *travel.LatLng `json:"origin_loc,omitempty"` // from browser geolocation or the autocomplete pick
-	DestLoc     *travel.LatLng `json:"dest_loc,omitempty"`   // from the autocomplete pick
+	Origin              string         `json:"origin"`
+	Destination         string         `json:"destination"`
+	StartDate           string         `json:"start_date"` // YYYY-MM-DD
+	EndDate             string         `json:"end_date"`
+	Travelers           int            `json:"travelers"`
+	BudgetUSD           float64        `json:"budget_usd"`
+	Mode                string         `json:"mode"` // auto | drive | fly
+	VehicleMPG          float64        `json:"vehicle_mpg"`
+	Interests           []string       `json:"interests"`
+	OriginLoc           *travel.LatLng `json:"origin_loc,omitempty"` // from browser geolocation or the autocomplete pick
+	DestLoc             *travel.LatLng `json:"dest_loc,omitempty"`   // from the autocomplete pick
+	LocalTransport      string         `json:"local_transport"`
+	ActivityRadiusMiles float64        `json:"activity_radius_miles"`
 }
 
 type Option struct {
@@ -44,11 +46,12 @@ type Option struct {
 }
 
 type DayItem struct {
-	Time     string  `json:"time"`
-	Title    string  `json:"title"`
-	Detail   string  `json:"detail,omitempty"`
-	CostUSD  float64 `json:"cost_usd"`
-	Category string  `json:"category"`
+	Time        string  `json:"time"`
+	Title       string  `json:"title"`
+	Detail      string  `json:"detail,omitempty"`
+	CostUSD     float64 `json:"cost_usd"`
+	CostUnknown bool    `json:"cost_unknown,omitempty"`
+	Category    string  `json:"category"`
 }
 
 type Day struct {
@@ -59,38 +62,41 @@ type Day struct {
 }
 
 type Plan struct {
-	Title           string               `json:"title"`
-	Summary         string               `json:"summary"`
-	RecommendedMode string               `json:"recommended_mode"`
-	Options         []Option             `json:"options"`
-	Drive           travel.DriveEstimate `json:"drive"`
-	Flights         []travel.FlightQuote `json:"flights"`
-	Hotels          []travel.HotelQuote  `json:"hotels"`
-	Stops           []travel.Place       `json:"stops"`
-	Activities      []travel.Place       `json:"activities"`
-	Food            []travel.Place       `json:"food"`
-	Days            []Day                `json:"days"`
-	TotalUSD        float64              `json:"total_usd"`
-	UnderBudget     bool                 `json:"under_budget"`
-	Nights          int                  `json:"nights"`
-	OriginLoc       travel.LatLng        `json:"origin_loc"`
-	DestLoc         travel.LatLng        `json:"dest_loc"`
-	OriginPlace     travel.Placemark     `json:"origin_place"`             // what the origin resolved to ("Lawrence, KS")
-	DestPlace       travel.Placemark     `json:"dest_place"`               // what the destination resolved to
-	OriginAirport   *travel.Airport      `json:"origin_airport,omitempty"` // nearest airport used for fares
-	DestAirport     *travel.Airport      `json:"dest_airport,omitempty"`
-	Weather         travel.Weather       `json:"weather"`
-	Safety          travel.Safety        `json:"safety"`
-	AIGenerated     bool                 `json:"ai_generated"`
-	Sources         map[string]string    `json:"sources"`
-	GeneratedAt     time.Time            `json:"generated_at"`
-	Travelers       int                  `json:"travelers"`
-	BudgetUSD       float64              `json:"budget_usd"`
-	SelectedFlight  int                  `json:"selected_flight"`
-	SelectedReturn  *travel.FlightQuote  `json:"selected_return,omitempty"`
-	FlightSelected  bool                 `json:"flight_selected"`
-	OriginName      string               `json:"origin_name"`
-	DestinationName string               `json:"destination_name"`
+	Title               string               `json:"title"`
+	Summary             string               `json:"summary"`
+	RecommendedMode     string               `json:"recommended_mode"`
+	Options             []Option             `json:"options"`
+	Drive               travel.DriveEstimate `json:"drive"`
+	Flights             []travel.FlightQuote `json:"flights"`
+	Hotels              []travel.HotelQuote  `json:"hotels"`
+	Stops               []travel.Place       `json:"stops"`
+	Activities          []travel.Place       `json:"activities"`
+	Food                []travel.Place       `json:"food"`
+	Days                []Day                `json:"days"`
+	TotalUSD            float64              `json:"total_usd"`
+	UnderBudget         bool                 `json:"under_budget"`
+	Nights              int                  `json:"nights"`
+	OriginLoc           travel.LatLng        `json:"origin_loc"`
+	DestLoc             travel.LatLng        `json:"dest_loc"`
+	OriginPlace         travel.Placemark     `json:"origin_place"`             // what the origin resolved to ("Lawrence, KS")
+	DestPlace           travel.Placemark     `json:"dest_place"`               // what the destination resolved to
+	OriginAirport       *travel.Airport      `json:"origin_airport,omitempty"` // nearest airport used for fares
+	DestAirport         *travel.Airport      `json:"dest_airport,omitempty"`
+	Weather             travel.Weather       `json:"weather"`
+	Safety              travel.Safety        `json:"safety"`
+	AIGenerated         bool                 `json:"ai_generated"`
+	Sources             map[string]string    `json:"sources"`
+	GeneratedAt         time.Time            `json:"generated_at"`
+	Travelers           int                  `json:"travelers"`
+	BudgetUSD           float64              `json:"budget_usd"`
+	SelectedFlight      int                  `json:"selected_flight"`
+	SelectedReturn      *travel.FlightQuote  `json:"selected_return,omitempty"`
+	FlightSelected      bool                 `json:"flight_selected"`
+	OriginName          string               `json:"origin_name"`
+	DestinationName     string               `json:"destination_name"`
+	LocalTransport      string               `json:"local_transport"`
+	ActivityRadiusMiles float64              `json:"activity_radius_miles"`
+	Interests           []string             `json:"interests,omitempty"`
 }
 
 type TravelSearch interface {
@@ -111,6 +117,9 @@ type Planner struct {
 }
 
 func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
+	if err := normalizeMobility(&req); err != nil {
+		return nil, err
+	}
 	if req.Travelers < 1 {
 		req.Travelers = 1
 	}
@@ -162,19 +171,8 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("hotel search: %w", err)
 	}
-	activities := p.activitiesFor(ctx, dest, req.Interests)
-	food := p.Places.Nearby(ctx, dest, "food", 4)
-	var stops []travel.Place
-	seen := map[string]bool{}
-	for _, pt := range travel.Interpolate(origin, dest, 2) {
-		for _, s := range p.Places.Nearby(ctx, pt, "rest_stop", 2) {
-			if !seen[s.Name] {
-				seen[s.Name] = true
-				stops = append(stops, s)
-			}
-		}
-	}
-
+	activities := p.activitiesFor(ctx, dest, req.Interests, req.ActivityRadiusMiles)
+	food := p.Places.Explore(ctx, dest, "food", 6, req.ActivityRadiusMiles)
 	weather := p.Weather.Forecast(ctx, dest, destPlace.Label, req.StartDate, req.EndDate)
 	safety := travel.SafetyFor(ctx, destPlace.Name+", "+destPlace.Region)
 
@@ -185,14 +183,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	})
 
 	// 3. Score the options.
-	actCost := 0.0
-	for _, a := range activities[:min(4, len(activities))] {
-		actCost += a.PriceUSD * float64(req.Travelers)
-	}
-	for _, f := range food[:min(3, len(food))] {
-		actCost += f.PriceUSD * float64(req.Travelers) * float64(nights)
-	}
-	actCost = round2(actCost)
+	actCost := plannedPlaceCost(activities, food, dest, weather, start, nights, req.Travelers)
 
 	// Hotel choice honors the budget: the best-rated stay that still fits after
 	// the cheapest transport and activities; otherwise the cheapest stay.
@@ -217,7 +208,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	driveOpt.TotalUSD = round2(driveOpt.TransportUSD + lodging + actCost)
 	driveOpt.Why = fmt.Sprintf("%.0f mi each way, %.1f gal of gas at $%.2f", drive.DistanceMiles, drive.GallonsNeeded, drive.GasPriceUSD)
 	driveOpt.Factors = []string{
-		fmt.Sprintf("$%.0f per night all-in", driveOpt.TotalUSD/float64(nights)),
+		fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", driveOpt.TotalUSD/float64(nights)),
 		fmt.Sprintf("%.1f h on the road round trip", driveOpt.TravelHours),
 		fmt.Sprintf("gas $%.0f for %d traveler(s), no per-seat cost", drive.RoundTripUSD, req.Travelers),
 		hotelNote,
@@ -237,7 +228,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 			flyOpt.TravelHours = round1(flyOpt.TravelHours + (originAirport.DistanceMiles+destAirport.DistanceMiles)*2/45)
 		}
 		flyOpt.Factors = []string{
-			fmt.Sprintf("$%.0f per night all-in", flyOpt.TotalUSD/float64(nights)),
+			fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", flyOpt.TotalUSD/float64(nights)),
 			fmt.Sprintf("%.1f h door to door round trip incl. airport time", flyOpt.TravelHours),
 			fmt.Sprintf("$%.0f/person × %d = $%.0f airfare", f.PriceUSD, req.Travelers, flyOpt.TransportUSD),
 			hotelNote,
@@ -272,6 +263,19 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 		}
 	}
 
+	stops := make([]travel.Place, 0)
+	if recommended.Mode == "drive" {
+		seen := map[string]bool{}
+		for _, pt := range travel.Interpolate(origin, dest, 2) {
+			for _, s := range p.Places.Nearby(ctx, pt, "rest_stop", 2) {
+				if !seen[s.Name] {
+					seen[s.Name] = true
+					stops = append(stops, s)
+				}
+			}
+		}
+	}
+
 	plan := &Plan{
 		Title:           fmt.Sprintf("%s → %s", originPlace.Label, destPlace.Label),
 		RecommendedMode: recommended.Mode,
@@ -295,16 +299,18 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 			"route": routeSrc, "gas": drive.Source, "geocode": destPlace.Source,
 			"flights": "serpapi",
 			"hotels":  "serpapi",
-			"places":  sourceOf(len(activities) > 0 && activities[0].Source == "google", "google"),
+			"places":  placesSource(activities, food, stops),
 		},
 		Weather:     weather,
 		Safety:      safety,
 		GeneratedAt: time.Now(),
 		Travelers:   req.Travelers, BudgetUSD: req.BudgetUSD,
 		OriginName: req.Origin, DestinationName: req.Destination,
+		LocalTransport: req.LocalTransport, ActivityRadiusMiles: req.ActivityRadiusMiles, Interests: req.Interests,
 	}
 	plan.Sources["weather"] = weather.Source
 	plan.Sources["safety"] = "fbi-ucr"
+	plan.Sources["local_transport"] = "estimate"
 
 	// 4. Let the model write the narrative + daily schedule around the numbers.
 	if p.AI.Enabled() {
@@ -370,6 +376,8 @@ func (pl *Plan) ChooseHotel(name string, budget float64) error {
 			switch {
 			case strings.HasSuffix(o.Factors[j], "per night all-in"):
 				o.Factors[j] = fmt.Sprintf("$%.0f per night all-in", o.TotalUSD/float64(pl.Nights))
+			case strings.Contains(o.Factors[j], "per night priced subtotal"):
+				o.Factors[j] = fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", o.TotalUSD/float64(pl.Nights))
 			case strings.Contains(o.Factors[j], "/night"):
 				o.Factors[j] = note
 			}
@@ -399,19 +407,21 @@ func (pl *Plan) ChooseHotel(name string, budget float64) error {
 
 // activitiesFor returns things to do shaped by the user's interests: a few per
 // chosen interest (deduped, interleaved so no single interest dominates),
-// topped up with general attractions. No interests → general attractions.
-func (p *Planner) activitiesFor(ctx context.Context, dest travel.LatLng, interests []string) []travel.Place {
-	const want = 6
+// without unrelated sightseeing. No activity interests → general attractions.
+func (p *Planner) activitiesFor(ctx context.Context, dest travel.LatLng, interests []string, radius float64) []travel.Place {
+	const want = 12
 	var lists [][]travel.Place
 	for _, in := range interests {
 		if in == "food" { // food is handled by its own section
 			continue
 		}
 		if _, ok := map[string]bool{"outdoors": true, "museums": true, "nightlife": true, "family": true, "history": true}[in]; ok {
-			lists = append(lists, p.Places.Nearby(ctx, dest, in, 3))
+			lists = append(lists, p.Places.Explore(ctx, dest, in, want, radius))
 		}
 	}
-	lists = append(lists, p.Places.Nearby(ctx, dest, "attraction", want))
+	if len(lists) == 0 {
+		lists = append(lists, p.Places.Explore(ctx, dest, "attraction", want, radius))
+	}
 	seen := map[string]bool{}
 	out := make([]travel.Place, 0, want)
 	for i := 0; len(out) < want; i++ {
@@ -514,18 +524,40 @@ func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start ti
 		"drive": plan.Drive, "best_flight": first(plan.Flights), "best_hotel": first(plan.Hotels), "other_hotels": rest(plan.Hotels, 3),
 		"activities": plan.Activities, "food": plan.Food, "stops": plan.Stops,
 		"weather": plan.Weather, "safety": plan.Safety,
+		"local_transport": effectiveTransport(plan), "activity_radius_miles": plan.ActivityRadiusMiles,
+		"local_transport_constraint": "Local routes, times and costs are unverified. Flying has no road-trip fuel/rest stops. Driving brings an own car; never schedule rental pickup when recommended_mode is drive. Use only supplied places inside the activity radius. Group nearby activities by coordinates, treat places beyond 20 miles as single-activity excursion days, and keep departure morning within 3 miles. Never repeat an activity or claim transit service or rental availability. Flag additional transportation for walking activities beyond 3 miles.",
 	})
 	system := `You are TPN, a sharp, budget-savvy travel planner. You are given REAL price data; never invent prices, only use the numbers provided. Reply with a single JSON object: {"summary": string (2-3 sentences, mention total cost and why this mode is the best value), "days": [{"day": int, "date": "YYYY-MM-DD", "theme": string, "items": [{"time": "HH:MM", "title": string, "detail": string, "cost_usd": number, "category": "transport|lodging|activity|food|stop"}]}]}. Day 1 starts with travel from origin; the last day ends with travel home. When flying, name the airports (origin_airport/destination_airport codes) and include the drive to/from each terminal when it is over 20 miles. Day 1 includes a "lodging" item checking in to best_hotel by name with its total cost; mention its area. Use the activities, food and stops lists by name. Keep each day to 4-6 items. Use the weather: on days with precip_pct >= 50 schedule indoor activities and say why in the theme. Use the safety data: when level is "elevated", schedule arrival before dark, keep late-night items near the hotel, and note rideshare for anything after 22:00; mention one safety tip in the summary.`
+	system += " Respect selected interests: do not add unrelated monuments or sightseeing. Use each restaurant at most once for dinner; if candidates run out, leave dinner open rather than repeat. Restaurant dinner hours and all activity opening hours are unverified: explicitly tell the traveler to confirm them. Preserve geographic variety across days and pair nearby activities within each day."
+	system += " Activities within one mile of each other on the same day must be different types (use the provider categories). Never pair two nearby parks, museums or other same-type activities; if no suitable second activity exists, schedule just one. Use exact activity names."
 	var out aiResponse
 	if err := p.AI.ChatJSON(ctx, system, string(data), &out); err != nil {
 		return err
 	}
 	days := sanitizeDays(out.Days, start, plan.Nights+1)
+	if err := validateActivityVariety(days, plan.Activities); err != nil {
+		return err
+	}
+	if plan.RecommendedMode == "fly" {
+		for i := range days {
+			items := make([]DayItem, 0, len(days[i].Items))
+			for _, item := range days[i].Items {
+				if item.Category != "stop" {
+					items = append(items, item)
+				}
+			}
+			days[i].Items = items
+		}
+	}
 	if strings.TrimSpace(out.Summary) == "" || len(days) == 0 {
 		return fmt.Errorf("ai returned empty plan")
 	}
 	plan.Summary = strings.TrimSpace(out.Summary)
+	plan.Summary += mobilityNote(plan)
 	plan.Days = days
+	if effectiveTransport(plan) != "own car" {
+		plan.Days[0].Items = append(plan.Days[0].Items, destinationTransfer(plan))
+	}
 	return nil
 }
 
@@ -567,6 +599,8 @@ func sanitizeDays(in []Day, start time.Time, maxDays int) []Day {
 func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day) {
 	days := []Day{}
 	total := plan.Nights + 1
+	activitiesByDay := dailyActivities(plan.Activities, plan.DestLoc, plan.Weather, start, plan.Nights)
+	mealsByDay := dailyMeals(plan.Food, plan.DestLoc, activitiesByDay, plan.Nights)
 	for i := 0; i < total; i++ {
 		d := Day{Day: i + 1, Date: start.AddDate(0, 0, i).Format("2006-01-02")}
 		switch {
@@ -584,25 +618,27 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 					price = plan.SelectedReturn.PriceUSD
 				}
 				if a := plan.OriginAirport; a != nil && a.DistanceMiles > 20 {
-					d.Items = append(d.Items, DayItem{Time: "07:00", Title: fmt.Sprintf("Drive to %s (%s)", a.Code, a.Name), Detail: fmt.Sprintf("%.0f mi from %s", a.DistanceMiles, plan.OriginPlace.Name), CostUSD: 0, Category: "transport"})
+					d.Items = append(d.Items, DayItem{Time: "07:00", Title: fmt.Sprintf("Travel to %s (%s)", a.Code, a.Name), Detail: fmt.Sprintf("%.0f mi from %s; arrange airport transportation, cost unverified", a.DistanceMiles, plan.OriginPlace.Name), CostUnknown: true, Category: "transport"})
 				}
 				d.Items = append(d.Items, DayItem{Time: "09:00", Title: fmt.Sprintf("Fly %s → %s on %s", f.Origin, f.Destination, f.Carrier), Detail: fmt.Sprintf("round trip, %d traveler(s), %s", req.Travelers, stopsLabel(f.Stops)), CostUSD: price * float64(req.Travelers), Category: "transport"})
 				if a := plan.DestAirport; a != nil && a.DistanceMiles > 20 {
-					d.Items = append(d.Items, DayItem{Time: "13:00", Title: fmt.Sprintf("%s → %s", a.Code, plan.DestPlace.Name), Detail: fmt.Sprintf("%.0f mi by rental car or rideshare", a.DistanceMiles), CostUSD: 0, Category: "transport"})
+					d.Items = append(d.Items, DayItem{Time: "13:00", Title: fmt.Sprintf("%s → %s", a.Code, plan.DestPlace.Name), Detail: fmt.Sprintf("%.0f mi; arrange transfer using %s, cost unverified", a.DistanceMiles, effectiveTransport(plan)), CostUnknown: true, Category: "transport"})
 				}
+			}
+			if effectiveTransport(plan) != "own car" {
+				d.Items = append(d.Items, destinationTransfer(plan))
 			}
 			if h := first(plan.Hotels); h != nil {
 				d.Items = append(d.Items, DayItem{Time: "16:00", Title: "Check in: " + h.Name, Detail: fmt.Sprintf("%d nights at $%.0f/night · %s", h.Nights, h.NightlyUSD, h.Area), CostUSD: h.TotalUSD, Category: "lodging"})
 			}
-			if f := first(plan.Food); f != nil {
-				d.Items = append(d.Items, DayItem{Time: "19:00", Title: "Dinner at " + f.Name, Detail: f.Note, CostUSD: f.PriceUSD * float64(req.Travelers), Category: "food"})
+			if f := mealsByDay[i]; f != nil {
+				d.Items = append(d.Items, DayItem{Time: "19:00", Title: "Dinner at " + f.Name, Detail: f.Note + "; dinner hours and availability unverified", CostUSD: f.PriceUSD * float64(req.Travelers), CostUnknown: f.PriceUnknown, Category: "food"})
 			}
 		case i == total-1:
 			d.Theme = "Head home"
-			// Pick the first activity the middle days did not already use.
-			if used := (total - 2) * 2; used < len(plan.Activities) {
-				a := plan.Activities[used]
-				d.Items = append(d.Items, DayItem{Time: "09:00", Title: a.Name, Detail: a.Note, CostUSD: a.PriceUSD * float64(req.Travelers), Category: "activity"})
+			if len(activitiesByDay[i]) > 0 {
+				a := activitiesByDay[i][0]
+				d.Items = append(d.Items, DayItem{Time: "09:00", Title: a.Name, Detail: a.Note + " · " + localTravelDetail(plan, a), CostUSD: a.PriceUSD * float64(req.Travelers), Category: "activity"})
 			}
 			if plan.RecommendedMode == "drive" {
 				d.Items = append(d.Items, DayItem{Time: "12:00", Title: "Drive back to " + plan.OriginPlace.Name, Detail: "fuel for the return leg", CostUSD: plan.Drive.FuelCostUSD, Category: "transport"})
@@ -619,23 +655,21 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 			}
 		default:
 			d.Theme = "Explore " + plan.DestPlace.Name
-			acts := plan.Activities
 			if w := weatherOn(plan.Weather, d.Date); w != nil && w.PrecipPct >= 50 {
 				d.Theme = fmt.Sprintf("Indoor day (%s, %d%% chance of rain)", strings.ToLower(w.Short), w.PrecipPct)
-				acts = indoorFirst(acts)
 			}
-			idx := (i - 1) * 2
-			for j := idx; j < idx+2 && j < len(acts); j++ {
-				a := acts[j]
-				d.Items = append(d.Items, DayItem{Time: []string{"10:00", "14:00"}[j-idx], Title: a.Name, Detail: a.Note, CostUSD: a.PriceUSD * float64(req.Travelers), Category: "activity"})
+			for j, a := range activitiesByDay[i] {
+				if distance(plan.DestLoc, a.Location) > 20 {
+					d.Theme = "Excursion: " + a.Name
+				}
+				d.Items = append(d.Items, DayItem{Time: []string{"10:00", "14:00"}[j], Title: a.Name, Detail: a.Note + " · " + localTravelDetail(plan, a), CostUSD: a.PriceUSD * float64(req.Travelers), Category: "activity"})
 			}
 			if plan.Safety.Level == "elevated" && len(plan.Activities) > 0 {
 				// Late items get a safety nudge; the AI path gets the same instruction in its prompt.
 				d.Items = append(d.Items, DayItem{Time: "21:30", Title: "Evening out near the hotel", Detail: "rideshare back after 10pm (safety: elevated)", CostUSD: 0, Category: "activity"})
 			}
-			if len(plan.Food) > 0 {
-				f := plan.Food[i%len(plan.Food)]
-				d.Items = append(d.Items, DayItem{Time: "18:30", Title: "Dinner at " + f.Name, Detail: f.Note, CostUSD: f.PriceUSD * float64(req.Travelers), Category: "food"})
+			if f := mealsByDay[i]; f != nil {
+				d.Items = append(d.Items, DayItem{Time: "18:30", Title: "Dinner at " + f.Name, Detail: f.Note + "; dinner hours and availability unverified", CostUSD: f.PriceUSD * float64(req.Travelers), CostUnknown: f.PriceUnknown, Category: "food"})
 			}
 		}
 		// Keep each day in clock order (the safety nudge is appended late).
@@ -668,9 +702,9 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 	if plan.Safety.Level == "elevated" && len(plan.Safety.Tips) > 0 {
 		extra += " Safety: " + plan.Safety.Tips[0]
 	}
-	summary := fmt.Sprintf("%s to %s for %d traveler(s), %d night(s). Best value is to %s: about $%.0f all-in (%s).%s%s",
+	summary := fmt.Sprintf("%s to %s for %d traveler(s), %d night(s). Best value is to %s: about $%.0f priced subtotal (%s).%s%s",
 		plan.OriginPlace.Label, plan.DestPlace.Label, req.Travelers, plan.Nights, plan.RecommendedMode, plan.TotalUSD, rec.Why, fits, extra)
-	return summary, days
+	return summary + mobilityNote(plan), days
 }
 
 func weatherOn(w travel.Weather, date string) *travel.DayWeather {
@@ -737,11 +771,23 @@ func first[T any](s []T) *T {
 	return &s[0]
 }
 
-func sourceOf(live bool, name string) string {
-	if live {
-		return name
+func placesSource(lists ...[]travel.Place) string {
+	sources := map[string]bool{}
+	for _, list := range lists {
+		for _, p := range list {
+			sources[p.Source] = true
+		}
 	}
-	return "mock"
+	if len(sources) == 0 {
+		return "no results"
+	}
+	if len(sources) > 1 {
+		return "mixed"
+	}
+	for source := range sources {
+		return source
+	}
+	return "no results"
 }
 
 func titleCase(s string) string {

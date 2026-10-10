@@ -2,6 +2,7 @@ package planner
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -37,11 +38,12 @@ func TestSelectFlightUpdatesWholePlan(t *testing.T) {
 			fly = o
 		}
 	}
-	if fly.TransportUSD != 800 || fly.TravelHours != 13 || plan.TotalUSD != fly.TotalUSD {
+	wantHours := round1(13 + (plan.OriginAirport.DistanceMiles+plan.DestAirport.DistanceMiles)*2/45)
+	if fly.TransportUSD != 800 || fly.TravelHours != wantHours || plan.TotalUSD != fly.TotalUSD {
 		t.Fatalf("selection totals inconsistent: %+v, total %v", fly, plan.TotalUSD)
 	}
-	if len(fly.Factors) != 4 || fly.Factors[1] != "13.0 h door to door round trip incl. airport time" ||
-		fly.Factors[2] != "$400/person × 2 = $800 airfare" || !strings.Contains(fly.Factors[3], "Test hotel") {
+	if len(fly.Factors) < 4 || fly.Factors[1] != fmt.Sprintf("%.1f h door to door round trip incl. airport time", wantHours) ||
+		fly.Factors[2] != "$400/person × 2 = $800 airfare" || !strings.Contains(fly.Factors[3], plan.Hotels[0].Name) {
 		t.Fatalf("selection factors not updated or hotel explanation lost: %v", fly.Factors)
 	}
 	if plan.SelectedFlight != 1 || plan.SelectedReturn != nil || plan.RecommendedMode != "fly" || !plan.FlightSelected {
@@ -53,10 +55,22 @@ func TestSelectFlightUpdatesWholePlan(t *testing.T) {
 	if plan.UnderBudget || plan.AIGenerated {
 		t.Error("budget and AI flags not updated")
 	}
+	foundFlight, foundLocal := false, false
 	for _, item := range plan.Days[0].Items {
-		if item.Category == "transport" && (!strings.Contains(item.Title, "Alternative airline") || item.CostUSD != 800) {
+		if item.Category != "transport" {
+			continue
+		}
+		if item.CostUnknown {
+			foundLocal = true
+			continue
+		}
+		foundFlight = true
+		if !strings.Contains(item.Title, "Alternative airline") || item.CostUSD != 800 {
 			t.Fatalf("itinerary transport not updated: %+v", item)
 		}
+	}
+	if !foundFlight || !foundLocal {
+		t.Fatal("missing flight fare or destination transportation checklist")
 	}
 }
 
@@ -66,7 +80,7 @@ func TestSelectReturnUsesProviderRoundTripPrice(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, o := range plan.Options {
-		if o.Mode == "fly" && (o.TransportUSD != 600 || o.TravelHours != 12) {
+		if o.Mode == "fly" && (o.TransportUSD != 600 || o.TravelHours != round1(12+(plan.OriginAirport.DistanceMiles+plan.DestAirport.DistanceMiles)*2/45)) {
 			t.Fatalf("round-trip fare should not add outbound fare or double duration: %+v", o)
 		}
 	}

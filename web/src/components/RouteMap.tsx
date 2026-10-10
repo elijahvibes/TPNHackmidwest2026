@@ -89,7 +89,7 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
 
   const routePins: Pin[] = [
     { at: origin, label: oName, kind: 'origin' },
-    ...(!flying ? plan.stops.filter(s => s.location?.lat).map(s => ({ at: s.location, label: s.name, kind: 'stop' as const })) : []),
+    ...(mode === 'drive' ? plan.stops.filter(s => s.location?.lat).map(s => ({ at: s.location, label: s.name, kind: 'stop' as const })) : []),
     ...(flying ? [
       { at: plan.origin_airport!, label: plan.origin_airport!.code, kind: 'airport' as const, sub: plan.origin_airport!.name },
       { at: plan.dest_airport!, label: plan.dest_airport!.code, kind: 'airport' as const, sub: plan.dest_airport!.name },
@@ -124,7 +124,7 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
         </div>
         <div className="mt-2">
           <Sketch pins={routePins} W={720} H={260} minSpan={0.5} label={`Route from ${oName} to ${dName}`}
-            legend={flying ? [['origin', 'origin'], ['airport', 'airport'], ['dest', 'destination']] : [['origin', 'origin'], ['stop', 'stop'], ['dest', 'destination']]}
+            legend={flying ? [['origin', 'origin'], ['airport', 'airport'], ['dest', 'destination']] : [['origin', 'origin'], ...(mode === 'drive' && plan.stops.length > 0 ? [['stop', 'stop'] as [Kind, string]] : []), ['dest', 'destination']]}
             paths={(pr: Proj) => flying ? (
               <>
                 <path d={pr.arc(origin, plan.origin_airport!, 0)} stroke="var(--color-muted)" strokeWidth="1.5" strokeDasharray="2 3" fill="none" />

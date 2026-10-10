@@ -59,7 +59,7 @@ func main() {
 		Geo:     travel.NewGeo(cfg.MapboxToken),
 		Fuel:    fuel,
 		SerpAPI: travel.NewSerpAPI(cfg.SerpAPIKey),
-		Places:  travel.NewPlaces(cfg.PlacesKey),
+		Places:  travel.NewPlacesWithGeoapify(cfg.PlacesKey, cfg.GeoapifyKey),
 		Weather: travel.NewNWS(),
 	}
 

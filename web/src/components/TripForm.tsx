@@ -29,6 +29,7 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'plan it', defa
     origin: defaultOrigin || 'Kansas City', destination: 'Denver',
     start_date: iso(plus(14)), end_date: iso(plus(17)),
     travelers: 2, budget_usd: 1200, mode: 'auto', interests: ['outdoors', 'food'],
+    local_transport: 'auto', activity_radius_miles: 25,
   })
   const [originPin, setOriginPin] = useState<Placemark | null>(null)
   const [destPin, setDestPin] = useState<Placemark | null>(null)
@@ -152,6 +153,35 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'plan it', defa
           </div>
           {mpgNote && <div className="mono text-[11px] text-muted mt-1">{mpgNote}</div>}
         </div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="local-transport" className="label">getting around at destination</label>
+          <select id="local-transport" className="input mt-1" value={v.local_transport}
+            onChange={e => {
+              const transport = e.target.value
+              if (transport === 'auto' || transport === 'rental_car' || transport === 'transit_rideshare' || transport === 'walking') {
+                set('local_transport', transport)
+                if (transport === 'walking') set('activity_radius_miles', 2)
+              }
+            }}>
+            <option value="auto">Own car if driving; transit/rideshare if flying</option>
+            <option value="rental_car" disabled={v.mode === 'drive'}>Rental car if flying; own car if driving</option>
+            <option value="transit_rideshare">Transit / rideshare</option>
+            <option value="walking">Walking</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="activity-radius" className="label">explore within (miles of destination)</label>
+          <input id="activity-radius" className="input mt-1" type="number" min={1} max={150} required
+            value={v.activity_radius_miles} onChange={e => set('activity_radius_miles', +e.target.value)} />
+        </div>
+        <p className="text-xs text-muted sm:col-span-2">
+          City and out-of-city activities within your range. This is straight-line distance, not travel time.
+          Local transport costs are not included. {v.local_transport === 'walking' && (v.activity_radius_miles ?? 0) > 3
+            && 'This range may require additional transportation beyond walking.'}
+        </p>
       </div>
 
       <div>

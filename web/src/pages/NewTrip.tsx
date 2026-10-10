@@ -22,7 +22,8 @@ export default function NewTrip() {
       })
       setStep('pricing flights, gas, hotels… asking the AI…')
       // Pinned points from the autocomplete ride along so the planner never re-guesses the place.
-      await api.planTrip(trip.id, { vehicle_mpg: v.vehicle_mpg, interests: v.interests, origin_loc: v.origin_loc, dest_loc: v.dest_loc })
+      await api.planTrip(trip.id, { vehicle_mpg: v.vehicle_mpg, interests: v.interests, origin_loc: v.origin_loc, dest_loc: v.dest_loc,
+        local_transport: v.local_transport, activity_radius_miles: v.activity_radius_miles })
       nav(`/app/trips/${trip.id}`)
     } catch (e) { setErr((e as Error).message); setBusy(false) }
   }

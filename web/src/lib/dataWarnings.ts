@@ -1,8 +1,10 @@
 import type { Plan } from './api'
+import { destinationTransport, roadStops } from './transport.ts'
 
 const sourceLabels: Record<string, string> = {
   route: 'Driving route', gas: 'Gas price', flights: 'Flights', hotels: 'Hotels',
   places: 'Places', weather: 'Weather', safety: 'Safety', ai: 'Itinerary',
+  local_transport: 'Destination transportation',
 }
 
 export function planDataWarnings(plan: Plan): string[] {
@@ -22,7 +24,7 @@ export function planDataWarnings(plan: Plan): string[] {
   check('Flights', plan.selected_return?.source)
   for (const hotel of plan.hotels) check('Hotels', hotel.source)
   for (const [label, places] of [
-    ['Attractions', plan.activities], ['Restaurants', plan.food], ['Rest stops', plan.stops],
+    ['Attractions', plan.activities], ['Restaurants', plan.food], ['Rest stops', roadStops(plan)],
   ] as const) {
     for (const place of places ?? []) check(label, place.source)
   }
@@ -31,11 +33,20 @@ export function planDataWarnings(plan: Plan): string[] {
   if (plan.sources.safety === 'fbi-ucr' && !/built-in|national average/i.test(plan.safety?.source ?? '')) {
     warnings.add('Safety: static built-in data is being used, not a live API.')
   }
-  if ([...(plan.activities ?? []), ...(plan.food ?? []), ...(plan.stops ?? [])].some(p => p.source === 'google')) {
+  if ([...(plan.activities ?? []), ...(plan.food ?? []), ...roadStops(plan)].some(p => p.source === 'google')) {
     warnings.add('Place costs: estimated from Google price levels, not actual admission or menu prices. A zero cost can mean the price is unknown, not free.')
   }
   if (!plan.ai_generated) {
     warnings.add('Itinerary: rule-based generation is being used, not an AI response.')
+  }
+  if (plan.local_transport) {
+    const costs = destinationTransport(plan) === 'own car' ? 'parking and local fuel'
+      : destinationTransport(plan) === 'rental car' ? 'rental, fares, parking and local fuel'
+        : 'fares and any additional transfers'
+    warnings.add(`Destination transportation: ${costs} costs are excluded from totals. Activity distance is not verified travel time.`)
+  }
+  if ([...(plan.activities ?? []), ...(plan.food ?? []), ...roadStops(plan)].some(p => p.source === 'geoapify')) {
+    warnings.add('Geoapify place prices are unknown and excluded from totals. No ratings or admission/menu prices are provided; these places are not necessarily free.')
   }
   return [...warnings]
 }
@@ -56,11 +67,15 @@ export function planRealData(plan: Plan): string[] {
   }
   quotes('Hotels', plan.hotels, 'Google Hotels via SerpApi', 'serpapi')
   for (const [label, places] of [
-    ['Attractions', plan.activities], ['Restaurants', plan.food], ['Rest stops', plan.stops],
+    ['Attractions', plan.activities], ['Restaurants', plan.food], ['Rest stops', roadStops(plan)],
   ] as const) {
     const count = (places ?? []).filter(place => place.source === 'google').length
     if (count > 0) {
       real.push(`${label}: ${count} of ${places.length} places from Google Places (names, locations and available ratings; costs are estimates).`)
+    }
+    const geoCount = (places ?? []).filter(place => place.source === 'geoapify').length
+    if (geoCount > 0) {
+      real.push(`${label}: ${geoCount} of ${places.length} places from Geoapify / OpenStreetMap (real names and locations; prices and ratings unavailable).`)
     }
   }
   if (plan.drive.source === 'eia') real.push('Gas price: EIA weekly US regular gasoline price, not a local station quote.')

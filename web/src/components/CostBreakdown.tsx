@@ -1,4 +1,5 @@
 import { hrs, usd, type Plan, type PlanOption } from '../lib/api'
+import { roadStops } from '../lib/transport'
 
 const MODE_ICON: Record<string, string> = { drive: '🚗', fly: '✈' }
 
@@ -17,6 +18,7 @@ export default function CostBreakdown({ plan, budget, onReplan, busy }: {
     { k: 'things to do & food', v: rec.activities_usd, c: 'var(--color-accent)' },
   ]
   const over = budget ? rec.total_usd - budget : 0
+  const unknownCosts = !!plan.local_transport || [...plan.activities, ...plan.food, ...roadStops(plan)].some(p => p.price_unknown)
   return (
     <div className="panel p-4 grid gap-4">
       <div>
@@ -35,6 +37,7 @@ export default function CostBreakdown({ plan, budget, onReplan, busy }: {
             <div key={s.k}><dt className="text-dim flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm" style={{ background: s.c }} />{s.k}</dt><dd className="text-ink">{usd(s.v)}</dd></div>
           ))}
         </dl>
+        {unknownCosts && <p className="text-xs text-muted mt-2">Priced subtotal only. Unknown place costs and local transportation are excluded; budget status is before those costs.</p>}
       </div>
 
       <div className="grid gap-2">
