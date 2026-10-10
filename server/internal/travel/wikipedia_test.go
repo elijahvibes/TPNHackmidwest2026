@@ -72,3 +72,12 @@ func TestMergeNotableRanksAndDedupes(t *testing.T) {
 		t.Errorf("unmatched place sinks to the end: %+v", got[3])
 	}
 }
+
+func TestParseWikivoyageSkipsTeams(t *testing.T) {
+	wt := `{{do | name=Denver Broncos | alt=Empower Field | lat=39.74 | long=-105.02 | content=The city's NFL team plays its home games here. }}
+{{do | name=Red Rocks Park and Amphitheatre | lat=39.6654 | long=-105.2057 | content=Concerts and hikes among red sandstone monoliths. }}`
+	got := ParseWikivoyage(wt, []string{"do"}, "attraction")
+	if len(got) != 1 || got[0].Name != "Red Rocks Park and Amphitheatre" {
+		t.Errorf("teams should be skipped: %+v", got)
+	}
+}

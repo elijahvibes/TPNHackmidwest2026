@@ -192,8 +192,8 @@ func normalizeSchedule(plan *Plan, days []Day) []string {
 						kept = append(kept, it)
 						continue
 					}
-					// Each timed stop needs ~90 minutes before the home leg's lead time.
-					need := t + spacing + lead
+					// Each timed stop takes about two hours, then the home leg's lead time.
+					need := t + 120 + lead
 					if need > homeAt {
 						if need <= latest {
 							notes = append(notes, fmt.Sprintf("day %d: trip home moved %s → %s to fit %s", d.Day, fmtHM(homeAt), fmtHM(need), it.Title))

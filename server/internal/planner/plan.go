@@ -123,7 +123,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 		activities = travel.MergeNotable(activities, p.Wiki.Listings(ctx, g.destPlace.Name, dest, req.ActivityRadiusMiles, "attraction", 15))
 		if views := p.Wiki.Popularity(ctx, placeNames(activities)); len(views) > 0 {
 			for i := range activities {
-				if v := views[activities[i].Name]; v > activities[i].Popularity {
+				if v := views[activities[i].Name]; activities[i].Popularity == 0 && v > 0 {
 					activities[i].Popularity = v
 				}
 			}

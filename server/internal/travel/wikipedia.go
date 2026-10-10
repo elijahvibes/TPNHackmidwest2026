@@ -243,6 +243,9 @@ var (
 	dollarsRe  = regexp.MustCompile(`\$\s?(\d+(?:\.\d+)?)`)
 	freeRe     = regexp.MustCompile(`(?i)\bfree\b`)
 	listingTag = regexp.MustCompile(`(?i)\{\{\s*(see|do|eat|listing)\s*(\||\n)`)
+	// Pro and college teams: a game is seasonal and unverifiable, and their
+	// readership measures fandom, so they never become itinerary candidates.
+	teamRe = regexp.MustCompile(`(?i)\b(nfl|nba|nhl|mlb|mls|wnba|ncaa|lacrosse|rugby|football team|baseball team|hockey team|basketball team|soccer team|home games|regular season|plays? (its|their) home)\b`)
 )
 
 // ParseWikivoyage extracts the given listing templates ({{see|...}} etc.)
@@ -273,6 +276,9 @@ func ParseWikivoyage(wikitext string, templates []string, kind string) []Place {
 		lng, err2 := strconv.ParseFloat(strings.TrimSpace(fields["long"]), 64)
 		title := cleanWiki(fields["name"])
 		if err1 != nil || err2 != nil || title == "" || !validGeoPoint(LatLng{Lat: lat, Lng: lng}) {
+			continue
+		}
+		if teamRe.MatchString(title + " " + fields["content"] + " " + fields["alt"]) {
 			continue
 		}
 		p := Place{
