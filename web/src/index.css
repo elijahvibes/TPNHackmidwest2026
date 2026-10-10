@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: #0b0f14;
+  --color-panel: #11161d;
+  --color-panel-2: #161d26;
+  --color-line: #1f2a36;
+  --color-ink: #e6edf3;
+  --color-muted: #8b98a8;
+  --color-dim: #5c6978;
+  --color-accent: #39ff88;
+  --color-accent-dim: #1f9c52;
+  --color-cyan: #5cc8ff;
+  --color-amber: #ffc857;
+  --color-rose: #ff6b81;
+}
+
+html, body, #root { height: 100%; }
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    linear-gradient(rgba(57, 255, 136, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57, 255, 136, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Reusable bits */
+.panel { @apply bg-panel border border-line rounded-lg; }
+.mono { font-family: var(--font-mono); }
+.prompt::before { content: '$ '; color: var(--color-accent); }
+.btn-primary, .btn-ghost { @apply font-mono inline-flex items-center gap-2 px-4 py-2 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+.btn-primary { @apply bg-accent text-bg border-accent hover:bg-[#5dffa0]; }
+.btn-ghost { @apply bg-transparent text-ink border-line hover:border-accent hover:text-accent; }
+.input { @apply font-mono w-full bg-bg border border-line rounded-md px-3 py-2 text-sm text-ink placeholder:text-dim focus:outline-none focus:border-accent; }
+.label { @apply font-mono text-[11px] uppercase tracking-widest text-muted; }
+.tag { @apply font-mono text-[11px] px-2 py-0.5 rounded border border-line text-muted; }
+
+.caret::after {
+  content: '▋';
+  color: var(--color-accent);
+  animation: blink 1s steps(1) infinite;
+  margin-left: 2px;
+}
+@keyframes blink { 50% { opacity: 0; } }
