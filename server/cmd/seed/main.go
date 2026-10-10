@@ -60,6 +60,7 @@ func main() {
 		Fuel:    fuel,
 		Amadeus: travel.NewAmadeus(cfg.AmadeusKey, cfg.AmadeusSecret),
 		Places:  travel.NewPlaces(cfg.PlacesKey),
+		Weather: travel.NewNWS(),
 	}
 
 	start := time.Now().AddDate(0, 0, 14)

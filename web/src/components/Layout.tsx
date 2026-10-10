@@ -11,13 +11,13 @@ export default function Layout() {
           <Link to="/" className="mono font-bold text-ink flex items-center gap-2">
             <span className="text-accent">~/</span>tpn
           </Link>
-          <nav className="mono text-sm flex items-center gap-5">
+          <nav className="mono text-xs sm:text-sm flex items-center gap-3 sm:gap-5">
             {user ? (
               <>
                 <NavLink to="/app" className={({ isActive }) => isActive ? 'text-accent' : 'text-muted hover:text-ink'}>trips</NavLink>
                 <NavLink to="/app/new" className={({ isActive }) => isActive ? 'text-accent' : 'text-muted hover:text-ink'}>+ new</NavLink>
                 <NavLink to="/app/payments" className={({ isActive }) => isActive ? 'text-accent' : 'text-muted hover:text-ink'}>payments</NavLink>
-                <span className="text-dim hidden sm:inline">{user.email}</span>
+                <NavLink to="/app/profile" className={({ isActive }) => isActive ? 'text-accent' : 'text-dim hover:text-ink'} title="profile">{user.name.split(' ')[0].toLowerCase()}@tpn</NavLink>
                 <button className="btn-ghost !py-1" onClick={() => { logout(); nav('/') }}>logout</button>
               </>
             ) : (

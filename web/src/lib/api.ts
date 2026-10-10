@@ -30,6 +30,9 @@ export type PlanOption = {
   mode: string; transport_usd: number; lodging_usd: number; activities_usd: number
   total_usd: number; travel_hours: number; value_score: number; why: string; factors: string[]
 }
+export type DayWeather = { date: string; label: string; high_f: number; low_f: number; short: string; precip_pct: number; icon: string }
+export type Weather = { place: string; days: DayWeather[]; note?: string; source: string }
+export type Safety = { city: string; violent_per_100k: number; level: 'low' | 'moderate' | 'elevated'; score: number; tips: string[]; source: string }
 export type DayItem = { time: string; title: string; detail?: string; cost_usd: number; category: string }
 export type Day = { day: number; date: string; theme: string; items: DayItem[] }
 
@@ -39,6 +42,7 @@ export type Plan = {
   stops: Place[]; activities: Place[]; food: Place[]; days: Day[]
   total_usd: number; under_budget: boolean; nights: number
   origin_loc: LatLng; dest_loc: LatLng; ai_generated: boolean
+  weather: Weather; safety: Safety
   sources: Record<string, string>; generated_at: string
 }
 
@@ -78,7 +82,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const res = await fetch(`/api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
   if (res.status === 204) return undefined as T
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error ?? res.statusText)
+  if (!res.ok) {
+    const msg = (data as { error?: string }).error ?? res.statusText
+    // Friendlier copy for the two outages a demo can hit.
+    if (res.status === 503) throw new ApiError(503, 'accounts are offline right now (database unreachable). The planner on the home page still works.')
+    throw new ApiError(res.status, msg)
+  }
   return data as T
 }
 

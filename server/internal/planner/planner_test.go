@@ -100,17 +100,51 @@ func TestPickHotelHonorsBudget(t *testing.T) {
 		{Name: "Fancy", Rating: 4.8, TotalUSD: 900},
 		{Name: "Cheap", Rating: 3.2, TotalUSD: 180},
 	}
-	if got := pickHotel(hotels, 1000)[0].Name; got != "Fancy" {
+	if got := pickHotel(hotels, 1000, false)[0].Name; got != "Fancy" {
 		t.Errorf("big budget should pick best rated, got %s", got)
 	}
-	if got := pickHotel(hotels, 350)[0].Name; got != "Value" {
+	if got := pickHotel(hotels, 350, false)[0].Name; got != "Value" {
 		t.Errorf("mid budget should pick best rated that fits, got %s", got)
 	}
-	if got := pickHotel(hotels, 100)[0].Name; got != "Cheap" {
+	if got := pickHotel(hotels, 100, false)[0].Name; got != "Cheap" {
 		t.Errorf("tiny budget should pick cheapest, got %s", got)
 	}
-	if got := pickHotel(hotels, 0)[0].Name; got != "Value" {
+	if got := pickHotel(hotels, 0, false)[0].Name; got != "Value" {
 		t.Errorf("no budget should keep order, got %s", got)
+	}
+}
+
+func TestPickHotelPrefersCentralWhenElevated(t *testing.T) {
+	hotels := []travel.HotelQuote{
+		{Name: "Far & Fancy", Rating: 4.9, TotalUSD: 500, DistanceKm: 9},
+		{Name: "Central OK", Rating: 4.1, TotalUSD: 450, DistanceKm: 1.2},
+		{Name: "Far & Cheap", Rating: 3.5, TotalUSD: 200, DistanceKm: 7},
+	}
+	if got := pickHotel(hotels, 1000, true)[0].Name; got != "Central OK" {
+		t.Errorf("elevated crime should prefer the central stay, got %s", got)
+	}
+	if got := pickHotel(hotels, 1000, false)[0].Name; got != "Far & Fancy" {
+		t.Errorf("normal crime should pick best rated, got %s", got)
+	}
+	if got := pickHotel(hotels, 0, true)[0].Name; got != "Central OK" {
+		t.Errorf("no budget + elevated should still move central first, got %s", got)
+	}
+}
+
+func TestWeatherAndSafetyInPlan(t *testing.T) {
+	p := newOffline() // Weather nil → mock forecast, no network
+	plan, err := p.Plan(context.Background(), Request{Origin: "Omaha", Destination: "St. Louis", StartDate: "2026-11-06", EndDate: "2026-11-09", Travelers: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Weather.Source != "mock" || len(plan.Weather.Days) != 4 {
+		t.Errorf("weather = %s/%d days, want mock/4", plan.Weather.Source, len(plan.Weather.Days))
+	}
+	if plan.Safety.Level != "elevated" || plan.Safety.Score <= 0 {
+		t.Errorf("St. Louis should rate elevated, got %+v", plan.Safety)
+	}
+	if plan.Sources["weather"] != "mock" || plan.Sources["safety"] == "" {
+		t.Errorf("sources missing weather/safety: %v", plan.Sources)
 	}
 }
 

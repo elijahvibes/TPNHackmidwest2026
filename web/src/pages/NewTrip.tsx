@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import TripForm, { type TripFormValue } from '../components/TripForm'
 import PlanProgress from '../components/PlanProgress'
+import { useAuth } from '../lib/auth'
 
 export default function NewTrip() {
   const nav = useNavigate()
+  const { user } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [step, setStep] = useState('')
@@ -30,7 +32,7 @@ export default function NewTrip() {
         <div className="mono text-xs text-muted prompt">tpn new</div>
         <h1 className="mono text-2xl font-bold mt-1">new trip</h1>
       </div>
-      <TripForm onSubmit={submit} busy={busy} submitLabel="save & plan" />
+      <TripForm onSubmit={submit} busy={busy} submitLabel="save & plan" defaultOrigin={user?.home_city} />
       {busy && step === 'saving trip…' && <div className="mono text-sm text-cyan">{step}<span className="caret" /></div>}
       <PlanProgress active={busy && step !== 'saving trip…'} />
       {err && <div className="mono text-sm text-rose">error: {err}</div>}

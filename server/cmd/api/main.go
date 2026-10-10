@@ -48,6 +48,7 @@ func main() {
 			Fuel:    fuel,
 			Amadeus: travel.NewAmadeus(cfg.AmadeusKey, cfg.AmadeusSecret),
 			Places:  travel.NewPlaces(cfg.PlacesKey),
+			Weather: travel.NewNWS(),
 		},
 		Payments: payments.NewJackHenry(cfg.JackHenryBaseURL, cfg.JackHenryKey),
 	}

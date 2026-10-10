@@ -9,13 +9,14 @@ const today = new Date()
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const plus = (n: number) => { const d = new Date(today); d.setDate(d.getDate() + n); return d }
 
-export default function TripForm({ onSubmit, busy, submitLabel = 'plan it' }: {
+export default function TripForm({ onSubmit, busy, submitLabel = 'plan it', defaultOrigin }: {
   onSubmit: (v: TripFormValue) => void
   busy?: boolean
   submitLabel?: string
+  defaultOrigin?: string | null
 }) {
   const [v, setV] = useState<TripFormValue>({
-    origin: 'Kansas City', destination: 'Denver',
+    origin: defaultOrigin || 'Kansas City', destination: 'Denver',
     start_date: iso(plus(14)), end_date: iso(plus(17)),
     travelers: 2, budget_usd: 1200, mode: 'auto', interests: ['outdoors', 'food'],
   })

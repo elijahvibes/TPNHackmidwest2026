@@ -74,6 +74,8 @@ type Plan struct {
 	Nights          int                  `json:"nights"`
 	OriginLoc       travel.LatLng        `json:"origin_loc"`
 	DestLoc         travel.LatLng        `json:"dest_loc"`
+	Weather         travel.Weather       `json:"weather"`
+	Safety          travel.Safety        `json:"safety"`
 	AIGenerated     bool                 `json:"ai_generated"`
 	Sources         map[string]string    `json:"sources"`
 	GeneratedAt     time.Time            `json:"generated_at"`
@@ -85,6 +87,7 @@ type Planner struct {
 	Fuel    *travel.Fuel
 	Amadeus *travel.Amadeus
 	Places  *travel.Places
+	Weather *travel.NWS // nil = mock forecast (tests)
 }
 
 func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
@@ -134,6 +137,9 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 		}
 	}
 
+	weather := p.Weather.Forecast(ctx, dest, titleCase(req.Destination), req.StartDate, req.EndDate)
+	safety := travel.SafetyFor(ctx, req.Destination)
+
 	sort.Slice(flights, func(i, j int) bool { return flights[i].PriceUSD < flights[j].PriceUSD })
 	sort.Slice(hotels, func(i, j int) bool {
 		// value = rating per dollar
@@ -156,7 +162,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	if len(flights) > 0 && flights[0].PriceUSD*float64(req.Travelers) < minTransport {
 		minTransport = flights[0].PriceUSD * float64(req.Travelers)
 	}
-	hotels = pickHotel(hotels, req.BudgetUSD-minTransport-actCost)
+	hotels = pickHotel(hotels, req.BudgetUSD-minTransport-actCost, safety.Level == "elevated")
 	lodging := 0.0
 	hotelNote := "no stay found"
 	if len(hotels) > 0 {
@@ -237,8 +243,12 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 			"hotels":  sourceOf(len(hotels) > 0 && hotels[0].Source == "amadeus", "amadeus"),
 			"places":  sourceOf(len(activities) > 0 && activities[0].Source == "google", "google"),
 		},
+		Weather:     weather,
+		Safety:      safety,
 		GeneratedAt: time.Now(),
 	}
+	plan.Sources["weather"] = weather.Source
+	plan.Sources["safety"] = "fbi-ucr"
 
 	// 4. Let the model write the narrative + daily schedule around the numbers.
 	if p.AI.Enabled() {
@@ -294,16 +304,37 @@ func (p *Planner) activitiesFor(ctx context.Context, dest travel.LatLng, interes
 }
 
 // pickHotel moves the chosen stay to index 0: the best-rated option whose total
-// fits in budgetLeft, else the cheapest. budgetLeft <= 0 means "no budget set"
-// when the caller passed no budget, so we fall back to best value (already sorted).
-func pickHotel(hotels []travel.HotelQuote, budgetLeft float64) []travel.HotelQuote {
-	if len(hotels) < 2 || budgetLeft <= 0 {
+// fits in budgetLeft, else the cheapest. budgetLeft <= 0 means "no budget set",
+// so we keep the value ordering. preferCentral (elevated-crime destinations)
+// restricts the pick to stays within ~3 km of the center when any exist.
+func pickHotel(hotels []travel.HotelQuote, budgetLeft float64, preferCentral bool) []travel.HotelQuote {
+	if len(hotels) < 2 {
 		return hotels
 	}
-	best := -1
-	cheapest := 0
+	central := func(h travel.HotelQuote) bool { return h.DistanceKm == 0 || h.DistanceKm <= 3 }
+	anyCentral := false
+	for _, h := range hotels {
+		if central(h) {
+			anyCentral = true
+			break
+		}
+	}
+	if budgetLeft <= 0 {
+		if preferCentral && anyCentral && !central(hotels[0]) {
+			for i, h := range hotels {
+				if central(h) {
+					return moveFront(hotels, i)
+				}
+			}
+		}
+		return hotels
+	}
+	best, cheapest := -1, -1
 	for i, h := range hotels {
-		if h.TotalUSD < hotels[cheapest].TotalUSD {
+		if preferCentral && anyCentral && !central(h) {
+			continue
+		}
+		if cheapest < 0 || h.TotalUSD < hotels[cheapest].TotalUSD {
 			cheapest = i
 		}
 		if h.TotalUSD <= budgetLeft && (best < 0 || h.Rating > hotels[best].Rating) {
@@ -314,6 +345,10 @@ func pickHotel(hotels []travel.HotelQuote, budgetLeft float64) []travel.HotelQuo
 	if pick < 0 {
 		pick = cheapest
 	}
+	return moveFront(hotels, pick)
+}
+
+func moveFront(hotels []travel.HotelQuote, pick int) []travel.HotelQuote {
 	out := make([]travel.HotelQuote, 0, len(hotels))
 	out = append(out, hotels[pick])
 	for i, h := range hotels {
@@ -344,8 +379,9 @@ func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start ti
 		"recommended_mode": plan.RecommendedMode, "options": plan.Options,
 		"drive": plan.Drive, "best_flight": first(plan.Flights), "best_hotel": first(plan.Hotels),
 		"activities": plan.Activities, "food": plan.Food, "stops": plan.Stops,
+		"weather": plan.Weather, "safety": plan.Safety,
 	})
-	system := `You are TPN, a sharp, budget-savvy travel planner. You are given REAL price data; never invent prices, only use the numbers provided. Reply with a single JSON object: {"summary": string (2-3 sentences, mention total cost and why this mode is the best value), "days": [{"day": int, "date": "YYYY-MM-DD", "theme": string, "items": [{"time": "HH:MM", "title": string, "detail": string, "cost_usd": number, "category": "transport|lodging|activity|food|stop"}]}]}. Day 1 starts with travel from origin; the last day ends with travel home. Use the activities, food and stops lists by name. Keep each day to 4-6 items.`
+	system := `You are TPN, a sharp, budget-savvy travel planner. You are given REAL price data; never invent prices, only use the numbers provided. Reply with a single JSON object: {"summary": string (2-3 sentences, mention total cost and why this mode is the best value), "days": [{"day": int, "date": "YYYY-MM-DD", "theme": string, "items": [{"time": "HH:MM", "title": string, "detail": string, "cost_usd": number, "category": "transport|lodging|activity|food|stop"}]}]}. Day 1 starts with travel from origin; the last day ends with travel home. Use the activities, food and stops lists by name. Keep each day to 4-6 items. Use the weather: on days with precip_pct >= 50 schedule indoor activities and say why in the theme. Use the safety data: when level is "elevated", schedule arrival before dark, keep late-night items near the hotel, and note rideshare for anything after 22:00; mention one safety tip in the summary.`
 	var out aiResponse
 	if err := p.AI.ChatJSON(ctx, system, string(data), &out); err != nil {
 		return err
@@ -430,10 +466,19 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 			}
 		default:
 			d.Theme = "Explore " + titleCase(req.Destination)
+			acts := plan.Activities
+			if w := weatherOn(plan.Weather, d.Date); w != nil && w.PrecipPct >= 50 {
+				d.Theme = fmt.Sprintf("Indoor day (%s, %d%% chance of rain)", strings.ToLower(w.Short), w.PrecipPct)
+				acts = indoorFirst(acts)
+			}
 			idx := (i - 1) * 2
-			for j := idx; j < idx+2 && j < len(plan.Activities); j++ {
-				a := plan.Activities[j]
+			for j := idx; j < idx+2 && j < len(acts); j++ {
+				a := acts[j]
 				d.Items = append(d.Items, DayItem{Time: []string{"10:00", "14:00"}[j-idx], Title: a.Name, Detail: a.Note, CostUSD: a.PriceUSD * float64(req.Travelers), Category: "activity"})
+			}
+			if plan.Safety.Level == "elevated" && len(plan.Activities) > 0 {
+				// Late items get a safety nudge; the AI path gets the same instruction in its prompt.
+				d.Items = append(d.Items, DayItem{Time: "21:30", Title: "Evening out near the hotel", Detail: "rideshare back after 10pm (safety: elevated)", CostUSD: 0, Category: "activity"})
 			}
 			if len(plan.Food) > i%len(plan.Food) {
 				f := plan.Food[i%len(plan.Food)]
@@ -456,9 +501,54 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 			fits = fmt.Sprintf(" That is $%.0f over your $%.0f budget.", plan.TotalUSD-req.BudgetUSD, req.BudgetUSD)
 		}
 	}
-	summary := fmt.Sprintf("%s to %s for %d traveler(s), %d night(s). Best value is to %s: about $%.0f all-in (%s).%s",
-		titleCase(req.Origin), titleCase(req.Destination), req.Travelers, plan.Nights, plan.RecommendedMode, plan.TotalUSD, rec.Why, fits)
+	extra := ""
+	if len(plan.Weather.Days) > 0 {
+		w := plan.Weather.Days[0]
+		extra += fmt.Sprintf(" Weather on arrival: %s, high %d°F.", strings.ToLower(w.Short), w.HighF)
+	}
+	if plan.Safety.Level == "elevated" && len(plan.Safety.Tips) > 0 {
+		extra += " Safety: " + plan.Safety.Tips[0]
+	}
+	summary := fmt.Sprintf("%s to %s for %d traveler(s), %d night(s). Best value is to %s: about $%.0f all-in (%s).%s%s",
+		titleCase(req.Origin), titleCase(req.Destination), req.Travelers, plan.Nights, plan.RecommendedMode, plan.TotalUSD, rec.Why, fits, extra)
 	return summary, days
+}
+
+func weatherOn(w travel.Weather, date string) *travel.DayWeather {
+	for i := range w.Days {
+		if w.Days[i].Date == date {
+			return &w.Days[i]
+		}
+	}
+	return nil
+}
+
+// indoorFirst stable-sorts activities so likely-indoor ones lead on wet days.
+func indoorFirst(in []travel.Place) []travel.Place {
+	indoor := func(p travel.Place) bool {
+		n := strings.ToLower(p.Name)
+		if p.Category == "museums" || p.Category == "nightlife" {
+			return true
+		}
+		for _, k := range []string{"museum", "gallery", "center", "centre", "hall", "aquarium", "theater", "theatre", "market", "brewery"} {
+			if strings.Contains(n, k) {
+				return true
+			}
+		}
+		return false
+	}
+	out := make([]travel.Place, 0, len(in))
+	for _, p := range in {
+		if indoor(p) {
+			out = append(out, p)
+		}
+	}
+	for _, p := range in {
+		if !indoor(p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func first[T any](s []T) *T {

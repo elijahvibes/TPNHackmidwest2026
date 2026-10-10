@@ -1,5 +1,6 @@
 import { hrs, usd, type Plan } from '../lib/api'
 import RouteMap from './RouteMap'
+import { SafetyCard, WeatherStrip } from './WeatherSafety'
 
 const catColor: Record<string, string> = {
   transport: 'text-cyan', lodging: 'text-amber', activity: 'text-accent', food: 'text-rose', stop: 'text-muted',
@@ -55,6 +56,11 @@ export default function PlanView({ plan }: { plan: Plan }) {
             </dl>
           </div>
         ))}
+      </section>
+
+      <section className="grid md:grid-cols-[2fr_1fr] gap-4">
+        <WeatherStrip w={plan.weather} />
+        <SafetyCard s={plan.safety} />
       </section>
 
       {plan.origin_loc && plan.dest_loc && (

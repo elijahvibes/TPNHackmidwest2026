@@ -9,6 +9,7 @@ import NewTrip from './pages/NewTrip'
 import TripView from './pages/TripView'
 import Share from './pages/Share'
 import Payments from './pages/Payments'
+import Profile from './pages/Profile'
 
 function Private({ children }: { children: React.ReactElement }) {
   const { user, loading } = useAuth()
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/app/new" element={<Private><NewTrip /></Private>} />
         <Route path="/app/trips/:id" element={<Private><TripView /></Private>} />
         <Route path="/app/payments" element={<Private><Payments /></Private>} />
+        <Route path="/app/profile" element={<Private><Profile /></Private>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
