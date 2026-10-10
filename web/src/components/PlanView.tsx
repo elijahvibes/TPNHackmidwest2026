@@ -40,17 +40,17 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
     <div className="grid gap-6">
       <DataWarning details={planDataWarnings(plan)} />
       <section aria-label="Real provider data" className="rounded-lg border-2 border-accent bg-accent/5 p-5 print:hidden">
-        <h2 className="mono text-xl font-bold text-accent">REAL PROVIDER DATA USED IN THIS PLAN</h2>
+        <h2 className="mono text-xl font-bold text-accent">REAL PROVIDER DATA IN THIS PLAN</h2>
         {realData.length > 0 ? (
           <ul className="mt-3 list-disc pl-5 grid gap-1 text-sm">
             {realData.map(detail => <li key={detail}>{detail}</li>)}
           </ul>
         ) : (
-          <p className="mt-2 text-muted">No real provider results are identified in this plan.</p>
+          <p className="mt-2 text-muted">This plan has no identified real provider results.</p>
         )}
         <p className="mt-3 text-xs text-muted">
-          Based on the sources recorded when this plan was generated, not a new availability check.
-          Saved results may be out of date. Real search prices are not guaranteed booking quotes.
+          This list comes from the sources recorded when the plan was generated. TPN did not recheck
+          availability, so saved results may be out of date, and search prices are not booking quotes.
         </p>
       </section>
       <header className="panel p-5 print:border-0 print:p-0">
@@ -91,7 +91,7 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
           ))}
         </div>
         {(plan.sources.flights === 'serpapi' || plan.sources.hotels === 'serpapi') && (
-          <p className="text-dim text-xs mt-3">Flight and stay prices are Google Travel search results via SerpApi, not guaranteed booking quotes. Optional fees and final checkout prices may differ.</p>
+          <p className="text-dim text-xs mt-3">Flight and stay prices are Google Travel search results via SerpApi. They are not booking quotes, and fees and final checkout prices may differ.</p>
         )}
       </header>
 

@@ -32,7 +32,7 @@ export default function NewTrip() {
       <div>
         <div className="mono text-xs text-muted prompt">tpn new</div>
         <h1 className="mono text-2xl font-bold mt-1">new trip</h1>
-        <p className="text-sm text-muted mt-1">Any city, town or park. Flights are priced from the nearest airport; the drive is priced for your car.</p>
+        <p className="text-sm text-muted mt-1">Enter any city, town or park. TPN prices flights from the nearest airport and the drive for your car.</p>
       </div>
       <TripForm onSubmit={submit} busy={busy} submitLabel="save & plan" defaultOrigin={user?.home_city} />
       {busy && step === 'saving trip…' && <div className="mono text-sm text-cyan">{step}<span className="caret" /></div>}

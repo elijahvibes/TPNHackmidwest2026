@@ -9,9 +9,9 @@ export function planDataWarnings(plan: Plan): string[] {
   const warnings = new Set<string>()
   const check = (label: string, source: string | undefined) => {
     if (!source) return
-    if (/mock/i.test(source)) warnings.add(`${label}: mock data is being used.`)
-    else if (/fallback|estimate/i.test(source)) warnings.add(`${label}: fallback data or estimates are being used, not live results.`)
-    else if (/built-in|national average/i.test(source)) warnings.add(`${label}: static built-in data is being used, not a live API.`)
+    if (/mock/i.test(source)) warnings.add(`${label}: mock data in use.`)
+    else if (/fallback|estimate/i.test(source)) warnings.add(`${label}: fallback data or estimates, not live results.`)
+    else if (/built-in|national average/i.test(source)) warnings.add(`${label}: static built-in data, not a live API.`)
   }
 
   for (const [key, source] of Object.entries(plan.sources)) {
@@ -29,13 +29,13 @@ export function planDataWarnings(plan: Plan): string[] {
   check('Weather', plan.weather?.source)
   check('Safety', plan.safety?.source)
   if (plan.sources.safety === 'fbi-ucr' && !/built-in|national average/i.test(plan.safety?.source ?? '')) {
-    warnings.add('Safety: static built-in data is being used, not a live API.')
+    warnings.add('Safety: static built-in data, not a live API.')
   }
   if ([...(plan.activities ?? []), ...(plan.food ?? []), ...(plan.stops ?? [])].some(p => p.source === 'google')) {
-    warnings.add('Place costs: estimated from Google price levels, not actual admission or menu prices. A zero cost can mean the price is unknown, not free.')
+    warnings.add('Place costs: estimated from Google price levels, not admission or menu prices. A cost of zero can mean the price is unknown.')
   }
   if (!plan.ai_generated) {
-    warnings.add('Itinerary: rule-based generation is being used, not an AI response.')
+    warnings.add('Itinerary: rule-based, not written by AI.')
   }
   return [...warnings]
 }

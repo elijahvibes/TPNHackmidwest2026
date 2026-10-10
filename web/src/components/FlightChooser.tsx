@@ -104,7 +104,7 @@ export default function FlightChooser({ plan, onSelect, disabled = false }: Prop
       <div>
         <h3 className="mono text-lg font-bold">Choose your flight</h3>
         <p className="text-sm text-muted mt-1">Best value first: fare + $25 per outbound travel hour + $50 per connection. Choose a departure, then a return and booking provider.</p>
-        <p className="text-xs text-dim mt-1">Prices are round trip per traveler, not the price of a single leg. Return selection may change the fare. All travelers are adults.</p>
+        <p className="text-xs text-dim mt-1">Prices are round trip per traveler. Choosing a return may change the fare. TPN prices all travelers as adults.</p>
       </div>
       {!plan.travelers && <p className="text-amber">Re-plan this older trip to enable flight selection.</p>}
       <div className="flex flex-wrap items-center gap-4">

@@ -7,10 +7,10 @@ import PlanProgress from '../components/PlanProgress'
 import { useAuth } from '../lib/auth'
 
 const PERKS = [
-  ['any city', 'type a town, a park, a lake — flights come from its nearest airport'],
-  ['your car', 'gas priced from your actual MPG and this week’s pump price'],
-  ['real stays', 'hotels near the destination, swappable, re-totaled live'],
-  ['drive vs fly', 'one value score so the cheap option is also the sane one'],
+  ['any city', 'type a town, a park or a lake. Flights come from its nearest airport'],
+  ['your car', 'gas priced from your MPG and this week’s pump price'],
+  ['real stays', 'hotels near the destination. Swap one and the total updates'],
+  ['drive vs fly', 'one value score weighs price against travel time'],
 ]
 
 export default function Landing() {
@@ -43,11 +43,11 @@ export default function Landing() {
         <div>
           <div className="mono text-xs text-muted prompt">tpn plan --from "anywhere" --to "anywhere" --optimize value</div>
           <h1 className="mono text-4xl sm:text-5xl font-bold mt-3 leading-tight">
-            Plan the whole trip.<br /><span className="text-accent">Pay the least for it.</span><span className="caret" />
+            Plan the whole trip<br /><span className="text-accent">for the least money.</span><span className="caret" />
           </h1>
           <p className="text-muted mt-4 max-w-xl">
-            Flights, gas for <em>your</em> car, hotels, things to do, and stops on the way, priced together and
-            ranked by value. The day-by-day itinerary is written by an AI running on Akamai.
+            TPN prices flights, gas for <em>your</em> car, hotels, activities and stops on the way together,
+            then ranks the options by value. An AI running on Akamai writes the day-by-day itinerary.
           </p>
           {!user && (
             <div className="mt-4 flex gap-3">

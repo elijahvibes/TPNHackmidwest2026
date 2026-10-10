@@ -80,14 +80,14 @@ export default function TripView() {
       {planning && <PlanProgress active />}
       {err && <div className="mono text-sm text-rose">error: {err}</div>}
       <DataWarning details={receipt?.mock
-        ? ['Payment: simulated settlement only. No money was moved and no airline ticket or hotel was reserved.']
+        ? ['Payment: simulated settlement. No money moved, and no flight or hotel was reserved.']
         : paymentsLive === false && trip.status !== 'booked'
-          ? ['Payments: mock mode is enabled. The book button will simulate a payment, not move money or reserve travel.']
+          ? ['Payments: mock mode is on. The book button simulates a payment. It moves no money and reserves no travel.']
           : []} />
       {receipt && (
         <div className="panel p-4 border-accent mono text-sm">
           <span className="text-accent">✓ payment settled</span> · ref {receipt.ref}
-          {receipt.mock && <span className="text-rose font-bold"> · simulated payment, not a real charge</span>}
+          {receipt.mock && <span className="text-rose font-bold"> · simulated payment, no real charge</span>}
         </div>
       )}
       {trip.plan ? (
