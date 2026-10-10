@@ -26,6 +26,7 @@ type Config struct {
 	SerpAPIKey  string
 	EIAKey      string
 	PlacesKey   string // Google Places
+	GeoapifyKey string
 	MapboxToken string
 
 	// Payments
@@ -84,6 +85,7 @@ func Load() Config {
 		SerpAPIKey:       env("SERPAPI_KEY", ""),
 		EIAKey:           env("EIA_KEY", ""),
 		PlacesKey:        env("GOOGLE_PLACES_KEY", ""),
+		GeoapifyKey:      env("GEOAPIFY_KEY", ""),
 		MapboxToken:      env("MAPBOX_TOKEN", ""),
 		JackHenryBaseURL: env("JACKHENRY_BASE_URL", ""),
 		JackHenryKey:     env("JACKHENRY_KEY", ""),

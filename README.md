@@ -105,6 +105,85 @@ receipts. Mock settlement does not move money or reserve travel.
 
 Warning detection tests: `node --test web/tests/dataWarnings.test.mjs` (Node 22.18+).
 
+## Free real places with Geoapify
+
+### Destination mobility and activity range
+
+The trip form separates arrival mode from getting around: own car when driving
+(transit/rideshare when flying), rental car, transit/rideshare, or walking.
+Users set an exploration radius of 1–150 miles measured straight-line from the
+destination center. Default is 25 miles; choosing walking suggests 2 miles,
+but users may override it. Wider walking ranges show an additional-transport warning.
+
+Geoapify searches the center and four surrounding bias points inside the same
+user boundary, interleaves results, and removes duplicates. Up to 12 activities
+and 6 restaurants are retained. The rule-based itinerary orders activities by
+proximity and chooses dinner near the day's activity area. Local mobility and
+range persist in saved plans, re-planning, and flight changes.
+
+Selected activity interests are searched without generic sightseeing top-ups;
+if no activity interests are selected, general attractions are used. Outdoor
+results are parks/natural features, not generic monument searches. Discovery
+order supplies diverse daily anchors; proximity is used only to pair activities
+within a day. Dinner searches restaurants, not cafes, and uses each venue at
+most once; exhausted dinner candidates leave the slot open. Opening hours,
+dinner service, quality and availability remain unverified, not guarantees.
+
+Same-day activities within one straight-line mile must have different activity
+types. Provider categories distinguish parks, museums, nature, sightseeing and
+other types; older/mock results use their search category conservatively.
+If no suitable second activity exists, the day keeps one activity rather than
+adding an unrelated suggestion. AI schedules violating this rule fall back to
+the deterministic planner.
+
+The itinerary includes a destination transportation checklist only when transport
+needs arranging (not when using your own car), with unknown costs rather than
+a fabricated free transfer. Activities beyond 20 miles use
+single-activity excursion days; departure-morning activities stay within 3 miles.
+Distances are geographic heuristics, not verified city limits or transit routes.
+
+Road-trip fuel/rest stops are fetched and shown only for driving plans, never
+for flights. Selecting a flight clears previously planned road stops.
+Driving with the default or rental-car preference uses the car brought on the
+trip, without rental pickup; the rental preference remains available if the
+traveler later switches to flying. Walking and transit preferences remain explicit.
+
+This is discovery and basic geographic grouping, not route-aware scheduling.
+Local transfers, rental availability, transit service, fares, parking and extra
+fuel are not verified or included in totals. Distant activities are flagged as
+excursions; preset itinerary times are not routing guarantees. Google-only and
+mock searches retain their existing coverage, filtered to the user boundary;
+multi-area discovery requires Geoapify.
+
+Real attractions, restaurants, and stops have "View map" links in the itinerary
+and place lists, opening Google Maps at the provider coordinates without another
+API call or key. Recognized real hotel check-ins have a "Search map" link using
+the hotel name and destination. Mock places, ambiguous names, and unmatched
+AI-written events remain unlinked; these are map links, not tickets or bookings.
+Place-link tests: `node --test web/tests/placeLinks.test.mjs`.
+
+Set `GEOAPIFY_KEY` in the root `.env` and restart the API. Geoapify takes
+priority over `GOOGLE_PLACES_KEY` for attractions, restaurants, interest-based
+activities, and rest stops. It returns real names, coordinates, and available
+addresses, but not ratings or admission/menu prices. Unknown place costs are
+excluded from totals and labeled "price unknown"; budget status does not include
+those expenses. The UI includes Geoapify and OpenStreetMap attribution.
+
+Successful searches with no named matches return empty lists, never invented
+places. Provider failures are logged without exposing the key and retain labeled
+mock results with the red warning, matching the existing demo fallback policy.
+Without either places key, mock places remain enabled.
+
+Each plan makes five restaurant requests and five per selected non-food
+interest (or five general-attraction requests if none are selected), plus two
+fuel-stop requests only when driving.
+Each multi-area search is bounded by a 20-second overall timeout and stops on
+the first failure; provider errors remain clearly labeled fallbacks.
+These consume Geoapify quota; re-plans make new requests. Rest-stop
+searches currently find fuel stations near interpolated points, not dedicated
+highway rest areas or real highway geometry. Geocoding
+and routing are unchanged.
+
 ## Real flights and hotels with SerpApi
 
 Amadeus Self-Service was decommissioned in July 2026. Its integration has been replaced

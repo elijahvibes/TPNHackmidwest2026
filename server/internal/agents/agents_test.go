@@ -27,7 +27,7 @@ func (f *fakeChat) ChatJSON(_ context.Context, _, user string, out any) error {
 
 type offChat struct{}
 
-func (offChat) Enabled() bool                                        { return false }
+func (offChat) Enabled() bool                                       { return false }
 func (offChat) ChatJSON(context.Context, string, string, any) error { return nil }
 
 var cands = []travel.Place{
@@ -35,7 +35,7 @@ var cands = []travel.Place{
 	{Name: "QuikTrip", Categories: []string{"service.vehicle.fuel"}},
 	{Name: "Riverfront Park", Categories: []string{"leisure.park"}},
 	{Name: "City Art Museum", PriceUSD: 18}, // duplicate
-	{Name: "Union Station", Categories: []string{"tourism.sights"}, Note: "hours 09:00-17:00"},
+	{Name: "Union Station", Categories: []string{"tourism.sights"}, Note: "hours 09:00-17:00", PriceUnknown: true},
 }
 
 func TestCurateKeepsOnlyListedPlaces(t *testing.T) {

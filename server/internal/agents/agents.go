@@ -52,7 +52,9 @@ type Report struct {
 	Notes   []string `json:"notes,omitempty"`
 }
 
-const callTimeout = 45 * time.Second
+// callTimeout fits the workshop endpoint's ~17 tokens/s with a few hundred
+// tokens of output plus queueing.
+const callTimeout = 90 * time.Second
 
 // ---------------------------------------------------------------- Curator
 

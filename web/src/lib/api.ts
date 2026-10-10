@@ -46,7 +46,7 @@ export type DriveEstimate = {
   fuel_cost_usd: number; round_trip_usd: number; vehicle_mpg: number; source: string
 }
 export type Place = {
-  name: string; category: string; rating: number; price_usd: number; location: LatLng; note?: string; source: string
+  name: string; category: string; categories?: string[]; rating: number; price_usd: number; price_unknown?: boolean; location: LatLng; note?: string; source: string
 }
 export type PlanOption = {
   mode: string; transport_usd: number; lodging_usd: number; activities_usd: number
@@ -56,8 +56,14 @@ export type DayWeather = { date: string; label: string; high_f: number; low_f: n
 export type Weather = { place: string; days: DayWeather[]; note?: string; source: string }
 export type Safety = { city: string; violent_per_100k: number; level: 'low' | 'moderate' | 'elevated'; score: number; tips: string[]; source: string }
 export type ItemCategory = 'transport' | 'lodging' | 'activity' | 'food' | 'stop'
-export type DayItem = { time: string; title: string; detail?: string; cost_usd: number; category: ItemCategory }
+export type DayItem = { time: string; title: string; detail?: string; cost_usd: number; cost_unknown?: boolean; category: ItemCategory }
 export type Day = { day: number; date: string; theme: string; items: DayItem[] }
+/** Researcher agent output: model knowledge about the destination, never prices or hours. */
+export type Research = {
+  overview: string; neighborhoods?: string[]; tips?: string[]; avoid?: string[]; seasonal?: string
+  place_notes?: { name: string; note: string }[]; source: string
+}
+export type AgentReport = { agent: string; status: 'ok' | 'skipped' | 'failed'; summary: string; notes?: string[] }
 
 export type Plan = {
   title: string; summary: string; recommended_mode: string; options: PlanOption[]
@@ -72,6 +78,8 @@ export type Plan = {
   sources: Record<string, string>; generated_at: string
   travelers?: number; budget_usd?: number; selected_flight?: number; selected_return?: FlightQuote
   flight_selected?: boolean; origin_name?: string; destination_name?: string
+  local_transport?: 'auto' | 'rental_car' | 'transit_rideshare' | 'walking'; activity_radius_miles?: number
+  research?: Research; agents?: AgentReport[]
 }
 
 export type Trip = {
@@ -89,9 +97,10 @@ export type PlanRequest = {
   origin: string; destination: string; start_date: string; end_date: string
   travelers: number; budget_usd?: number; mode?: string; vehicle_mpg?: number
   interests?: string[]; origin_loc?: LatLng; dest_loc?: LatLng
+  local_transport?: 'auto' | 'rental_car' | 'transit_rideshare' | 'walking'; activity_radius_miles?: number
 }
 
-export type PlanExtra = { vehicle_mpg?: number; interests?: string[]; mode?: string; origin_loc?: LatLng; dest_loc?: LatLng }
+export type PlanExtra = Pick<PlanRequest, 'vehicle_mpg' | 'interests' | 'mode' | 'origin_loc' | 'dest_loc' | 'local_transport' | 'activity_radius_miles'>
 
 const TOKEN_KEY = 'tpn.token'
 export const token = {

@@ -55,6 +55,9 @@ func (p *Planner) SelectFlight(ctx context.Context, plan *Plan, index int, retur
 		price = ret.PriceUSD
 		duration = float64(f.DurationMin+ret.DurationMin+300) / 60
 	}
+	if plan.OriginAirport != nil && plan.DestAirport != nil {
+		duration += (plan.OriginAirport.DistanceMiles + plan.DestAirport.DistanceMiles) * 2 / 45
+	}
 	found := false
 	for i := range plan.Options {
 		o := &plan.Options[i]
@@ -68,7 +71,7 @@ func (p *Planner) SelectFlight(ctx context.Context, plan *Plan, index int, retur
 		o.ValueScore = valueScore(*o, plan.Nights)
 		o.Why = fmt.Sprintf("%s round trip from $%.2f/person, %d outbound stop(s)", f.Carrier, price, f.Stops)
 		factors := []string{
-			fmt.Sprintf("$%.0f per night all-in", o.TotalUSD/float64(plan.Nights)),
+			fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", o.TotalUSD/float64(plan.Nights)),
 			fmt.Sprintf("%.1f h door to door round trip incl. airport time", o.TravelHours),
 			fmt.Sprintf("$%.0f/person × %d = $%.0f airfare", price, plan.Travelers, o.TransportUSD),
 		}
@@ -84,9 +87,12 @@ func (p *Planner) SelectFlight(ctx context.Context, plan *Plan, index int, retur
 	plan.SelectedFlight, plan.SelectedReturn = index, ret
 	plan.FlightSelected = true
 	plan.RecommendedMode = "fly"
+	plan.Stops = make([]travel.Place, 0)
+	plan.Sources["places"] = placesSource(plan.Activities, plan.Food)
 	plan.UnderBudget = plan.BudgetUSD <= 0 || plan.TotalUSD <= plan.BudgetUSD
 	req := Request{Origin: plan.OriginName, Destination: plan.DestinationName,
-		Travelers: plan.Travelers, BudgetUSD: plan.BudgetUSD}
+		Travelers: plan.Travelers, BudgetUSD: plan.BudgetUSD,
+		LocalTransport: plan.LocalTransport, ActivityRadiusMiles: plan.ActivityRadiusMiles}
 	plan.Summary, plan.Days = fallbackItinerary(req, plan, start)
 	plan.Summary = strings.Replace(plan.Summary, "Best value is to fly:", "You chose to fly:", 1)
 	plan.AIGenerated = false

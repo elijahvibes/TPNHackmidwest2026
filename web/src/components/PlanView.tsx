@@ -7,17 +7,15 @@ import RouteMap from './RouteMap'
 import { SafetyCard, WeatherStrip } from './WeatherSafety'
 import FlightChooser from './FlightChooser'
 import DataWarning from './DataWarning'
+import { AgentsCard, ResearchCard } from './AgentsPanel'
 import { planDataWarnings, planRealData } from '../lib/dataWarnings'
+import { placeMapLink } from '../lib/placeLinks'
+import { destinationTransport, roadStops } from '../lib/transport'
 
 export type PlanMeta = { travelers?: number; budget_usd?: number | null; status?: string }
 
 const MODE_ICON: Record<string, string> = { drive: '🚗', fly: '✈' }
 
-/**
- * Itinerary-first plan page: the day-by-day schedule is the main column; the
- * rail carries the stay, the money, the map and the conditions. Everything
- * else (the raw lists, the data sources) sits below the fold.
- */
 export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan, onSelectFlight, disabled, busy }: {
   plan: Plan
   meta?: PlanMeta
@@ -35,6 +33,8 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
   const budgetLeft = budget ? budget - rec.transport_usd - rec.activities_usd : undefined
   const live = Object.entries(plan.sources).filter(([, v]) => !['mock', 'fallback', 'estimate', 'none'].includes(v)).length
   const [showSources, setShowSources] = useState(false)
+  const stops = roadStops(plan)
+  const unknownCosts = !!plan.local_transport || [...plan.activities, ...plan.food, ...stops].some(p => p.price_unknown)
 
   return (
     <div className="grid gap-6">
@@ -45,9 +45,7 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
           <ul className="mt-3 list-disc pl-5 grid gap-1 text-sm">
             {realData.map(detail => <li key={detail}>{detail}</li>)}
           </ul>
-        ) : (
-          <p className="mt-2 text-muted">This plan has no identified real provider results.</p>
-        )}
+        ) : <p className="mt-2 text-muted">No real provider results are identified in this plan.</p>}
         <p className="mt-3 text-xs text-muted">
           This list comes from the sources recorded when the plan was generated. TPN did not recheck
           availability, so saved results may be out of date, and search prices are not booking quotes.
@@ -72,16 +70,17 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
             </div>
           </div>
           <div className="text-right">
-            <div className="label">all-in estimate</div>
+            <div className="label">{unknownCosts ? 'priced subtotal · unquoted costs excluded' : 'all-in estimate'}</div>
             <div className={`mono text-4xl font-bold tabular-nums ${plan.under_budget ? 'text-accent' : 'text-rose'}`}>{usd(plan.total_usd)}</div>
-            <div className="mono text-[11px] text-muted">{usd(plan.total_usd / Math.max(plan.nights, 1))}/night · {budget ? (plan.under_budget ? 'under budget' : 'over budget') : 'no budget set'}</div>
+            <div className="mono text-[11px] text-muted">{usd(plan.total_usd / Math.max(plan.nights, 1))}/night · {budget ? (plan.under_budget ? 'under budget' : 'over budget') : 'no budget set'}{unknownCosts && ' before unknown costs'}</div>
             {actions && <div className="flex flex-wrap justify-end gap-2 mt-3 print:hidden">{actions}</div>}
           </div>
         </div>
         <p className="text-muted mt-4 max-w-3xl leading-relaxed">{plan.summary}</p>
         <div className="flex flex-wrap items-center gap-2 mt-3 print:hidden">
+          {plan.local_transport && <span className="tag">getting around: {destinationTransport(plan)} · explore within {plan.activity_radius_miles} miles</span>}
           {plan.ai_generated
-            ? <span className="tag text-accent">✦ itinerary by AI on Akamai</span>
+            ? <span className="tag text-accent">✦ itinerary by {plan.agents?.length ? `${plan.agents.length} AI agents` : 'AI'} on Akamai</span>
             : <span className="tag text-amber">itinerary: rule-based (AI offline)</span>}
           <button className="tag hover:text-ink" onClick={() => setShowSources(s => !s)} aria-expanded={showSources}>
             {live}/{Object.keys(plan.sources).length} live data sources {showSources ? '▾' : '▸'}
@@ -99,16 +98,25 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
         <div className="grid gap-6 min-w-0">
           {onSelectFlight && <FlightChooser key={plan.generated_at} plan={plan} onSelect={onSelectFlight} disabled={disabled || busy} />}
           <Itinerary plan={plan} />
+          <ResearchCard r={plan.research} />
           <Explore plan={plan} />
         </div>
         <aside className="grid gap-4 min-w-0 [&>*]:min-w-0 lg:sticky lg:top-16 print:hidden">
           <StayCard hotels={plan.hotels} budgetLeft={budgetLeft} onChoose={onChooseHotel} source={plan.sources.hotels} />
           <CostBreakdown plan={plan} budget={budget} onReplan={onReplan} busy={busy} />
+          <AgentsCard plan={plan} />
           <RouteMap plan={plan} mode={plan.recommended_mode} />
           <WeatherStrip w={plan.weather} />
           <SafetyCard s={plan.safety} />
         </aside>
       </div>
+      {[...plan.activities, ...plan.food, ...stops].some(p => p.source === 'geoapify') && (
+        <p className="text-xs text-muted">
+          Powered by <a className="underline" href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a>
+          {' · '}© <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.
+          Place prices are unknown and excluded from the total.
+        </p>
+      )}
     </div>
   )
 }
@@ -117,7 +125,7 @@ function Explore({ plan }: { plan: Plan }) {
   const groups = [
     { title: 'things to do', list: plan.activities, color: 'text-accent' },
     { title: 'eat', list: plan.food, color: 'text-amber' },
-    { title: 'stops on the way', list: plan.stops, color: 'text-muted' },
+    { title: 'stops on the way', list: roadStops(plan), color: 'text-muted' },
   ].filter(g => g.list.length)
   if (!groups.length) return null
   return (
@@ -126,16 +134,21 @@ function Explore({ plan }: { plan: Plan }) {
         <div key={g.title} className="panel p-4">
           <h4 className="label">{g.title}</h4>
           <ul className="text-sm mt-2 grid gap-1.5">
-            {g.list.map((p, i) => (
-              <li key={i} className="flex justify-between gap-2">
-                <span className="min-w-0">
-                  <span className="text-ink">{p.name}</span>
-                  {p.rating > 0 && <span className={`mono text-[10px] ml-1.5 ${g.color}`}>★{p.rating.toFixed(1)}</span>}
-                  {p.note && <div className="text-[12px] text-dim">{p.note}</div>}
-                </span>
-                <span className="mono text-xs text-muted whitespace-nowrap">{p.price_usd ? usd(p.price_usd) : 'free'}</span>
-              </li>
-            ))}
+            {g.list.map((p, i) => {
+              const mapLink = placeMapLink(p)
+              return (
+                <li key={i} className="flex justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="text-ink">{p.name}</span>
+                    {p.rating > 0 && <span className={`mono text-[10px] ml-1.5 ${g.color}`}>★{p.rating.toFixed(1)}</span>}
+                    {p.note && <div className="text-[12px] text-dim">{p.note}</div>}
+                    {mapLink && <a href={mapLink} target="_blank" rel="noopener noreferrer" className="text-cyan underline"
+                      aria-label={`View map for ${p.name} (opens in a new tab)`}>View map</a>}
+                  </span>
+                  <span className="mono text-xs text-muted whitespace-nowrap">{p.price_unknown ? 'price unknown' : p.price_usd ? usd(p.price_usd) : 'free'}</span>
+                </li>
+              )
+            })}
           </ul>
         </div>
       ))}

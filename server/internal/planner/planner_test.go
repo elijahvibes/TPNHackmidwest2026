@@ -3,6 +3,8 @@ package planner
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -218,8 +220,8 @@ func TestInterestsShapeActivities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(shaped.Activities) == 0 || len(shaped.Activities) > 6 {
-		t.Fatalf("activities = %d, want 1..6", len(shaped.Activities))
+	if len(shaped.Activities) == 0 || len(shaped.Activities) > 12 {
+		t.Fatalf("activities = %d, want 1..12", len(shaped.Activities))
 	}
 	names := map[string]bool{}
 	for _, a := range shaped.Activities {
@@ -340,6 +342,9 @@ func TestChooseHotelRetotals(t *testing.T) {
 		if plan.Options[i].LodgingUSD != alt.TotalUSD {
 			t.Errorf("option %s lodging %.0f != %.0f", plan.Options[i].Mode, plan.Options[i].LodgingUSD, alt.TotalUSD)
 		}
+		if plan.Options[i].Factors[0] != fmt.Sprintf("$%.0f per night priced subtotal (local transport excluded)", plan.Options[i].TotalUSD/float64(plan.Nights)) {
+			t.Errorf("option subtotal explanation not updated: %v", plan.Options[i].Factors)
+		}
 		if plan.Options[i].Mode == plan.RecommendedMode {
 			rec = &plan.Options[i]
 		}
@@ -405,4 +410,44 @@ func TestPlanRequiresSerpAPIKey(t *testing.T) {
 	if plan != nil || !errors.Is(err, travel.ErrProvider) || !strings.Contains(err.Error(), "SERPAPI_KEY") {
 		t.Fatalf("expected missing key error with no plan, got %v, %v", plan, err)
 	}
+
+}
+
+func TestGeoapifyPlanLive(t *testing.T) {
+	if os.Getenv("GEOAPIFY_LIVE_TEST") != "1" {
+		t.Skip("set GEOAPIFY_LIVE_TEST=1 and GEOAPIFY_KEY for live places verification")
+	}
+	p := newOffline()
+	p.Places = travel.NewPlacesWithGeoapify("", os.Getenv("GEOAPIFY_KEY"))
+	plan, err := p.Plan(context.Background(), Request{
+		Origin: "Kansas City", Destination: "Chicago", StartDate: "2026-11-10",
+		EndDate: "2026-11-13", Travelers: 2, Mode: "fly",
+		LocalTransport: "rental_car", ActivityRadiusMiles: 50,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Sources["places"] != "geoapify" || len(plan.Activities) == 0 || len(plan.Food) == 0 {
+		t.Fatalf("real places did not reach plan: %v", plan.Sources)
+	}
+	if plan.LocalTransport != "rental_car" || plan.ActivityRadiusMiles != 50 {
+		t.Fatalf("mobility preferences did not reach plan: %+v", plan)
+	}
+	for _, list := range [][]travel.Place{plan.Activities, plan.Food, plan.Stops} {
+		for _, place := range list {
+			if place.Source != "geoapify" || !place.PriceUnknown || place.PriceUSD != 0 || place.Rating != 0 {
+				t.Fatalf("place contains mock/invented data: %+v", place)
+			}
+		}
+	}
+	for _, place := range append(append([]travel.Place{}, plan.Activities...), plan.Food...) {
+		if distance(plan.DestLoc, place.Location) > 50 {
+			t.Fatalf("live activity or restaurant outside user range: %+v", place)
+		}
+	}
+	if len(plan.Stops) != 0 {
+		t.Fatal("flying plan must not include road-trip fuel stops")
+	}
+	t.Logf("Geoapify plan: %d attractions, %d restaurants, %d fuel stops; flight/hotel test fixtures",
+		len(plan.Activities), len(plan.Food), len(plan.Stops))
 }

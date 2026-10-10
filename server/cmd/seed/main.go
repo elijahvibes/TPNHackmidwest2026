@@ -60,7 +60,7 @@ func main() {
 		Geo:     travel.NewGeo(cfg.MapboxToken),
 		Fuel:    fuel,
 		SerpAPI: travel.NewSerpAPI(cfg.SerpAPIKey),
-		Places:  travel.NewPlaces(cfg.PlacesKey).EnableOSM(aiClient),
+		Places:  travel.NewPlacesWithGeoapify(cfg.PlacesKey, cfg.GeoapifyKey).EnableOSM(aiClient),
 		Weather: travel.NewNWS(),
 	}
 

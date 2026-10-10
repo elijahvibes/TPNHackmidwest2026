@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmtDate, usd, type Day, type DayItem, type ItemCategory, type Plan } from '../lib/api'
+import { itineraryMapLink } from '../lib/placeLinks'
+import { roadStops, showTransportItem } from '../lib/transport'
 
 const ICON: Record<string, string> = { sun: '☀', cloud: '☁', rain: '🌧', snow: '❄', storm: '⛈', wind: '💨', fog: '🌫' }
 
@@ -21,6 +23,8 @@ export default function Itinerary({ plan }: { plan: Plan }) {
   const [active, setActive] = useState(1)
   const refs = useRef<Record<number, HTMLElement | null>>({})
   const weatherByDate = useMemo(() => Object.fromEntries((plan.weather?.days ?? []).map(d => [d.date, d])), [plan.weather])
+  const days = plan.days.map(d => ({...d, items: d.items.filter(it => showTransportItem(plan, it))}))
+  const unknownPlaceCosts = [...plan.activities, ...plan.food, ...roadStops(plan)].some(p => p.price_unknown)
 
   // Highlight the day currently in view as the reader scrolls.
   useEffect(() => {
@@ -39,14 +43,14 @@ export default function Itinerary({ plan }: { plan: Plan }) {
     refs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  const total = plan.days.reduce((s, d) => s + dayTotal(d), 0)
+  const total = days.reduce((s, d) => s + dayTotal(d), 0)
 
   return (
     <section className="grid gap-4" aria-label="itinerary">
       <div className="sticky top-14 z-[5] -mx-1 px-1 py-2 bg-bg/90 backdrop-blur print:static print:bg-transparent">
         <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
           <span className="mono text-xs text-muted prompt shrink-0">itinerary</span>
-          {plan.days.map(d => {
+          {days.map(d => {
             const w = weatherByDate[d.date]
             const on = d.day === active
             return (
@@ -62,7 +66,7 @@ export default function Itinerary({ plan }: { plan: Plan }) {
         </div>
       </div>
 
-      {plan.days.map(d => {
+      {days.map(d => {
         const w = weatherByDate[d.date]
         const sub = dayTotal(d)
         return (
@@ -79,10 +83,10 @@ export default function Itinerary({ plan }: { plan: Plan }) {
                   {ICON[w.icon] ?? '☀'} {w.high_f}° / {w.low_f}°{w.precip_pct > 0 ? ` · ${w.precip_pct}% rain` : ''}
                 </div>
               )}
-              <div className="mono text-sm text-ink tabular-nums">{sub ? usd(sub) : <span className="text-dim">free day</span>}</div>
+              <div className="mono text-sm text-ink tabular-nums">{sub ? usd(sub) : <span className="text-dim">{unknownPlaceCosts || d.items.some(it => it.cost_unknown) ? 'unquoted costs' : 'free day'}</span>}</div>
             </header>
             <ol className="px-5 py-2">
-              {d.items.map((it, i) => <Item key={i} it={it} last={i === d.items.length - 1} />)}
+              {d.items.map((it, i) => <Item key={i} it={it} last={i === d.items.length - 1} mapLink={itineraryMapLink(plan, it)} unknownPlaceCosts={unknownPlaceCosts} />)}
             </ol>
           </article>
         )
@@ -96,7 +100,7 @@ export default function Itinerary({ plan }: { plan: Plan }) {
   )
 }
 
-function Item({ it, last }: { it: DayItem; last: boolean }) {
+function Item({ it, last, mapLink, unknownPlaceCosts }: { it: DayItem; last: boolean; mapLink: string | undefined; unknownPlaceCosts: boolean }) {
   const c = CAT[it.category] ?? CAT.activity
   return (
     <li className="grid grid-cols-[44px_20px_1fr_auto] gap-x-3 relative">
@@ -109,9 +113,11 @@ function Item({ it, last }: { it: DayItem; last: boolean }) {
       <div className={`py-2.5 ${last ? '' : 'border-b border-line/60'}`}>
         <div className="text-sm text-ink">{it.title}</div>
         {it.detail && <div className="text-[13px] text-muted mt-0.5">{it.detail}</div>}
+        {mapLink && <a href={mapLink} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan underline"
+          aria-label={`View map for ${it.title} (opens in a new tab)`}>{it.category === 'lodging' ? 'Search map' : 'View map'}</a>}
         <div className="mono text-[10px] uppercase tracking-wider mt-1" style={{ color: c.color }}>{c.label}</div>
       </div>
-      <span className={`mono text-sm pt-2.5 tabular-nums ${it.cost_usd ? 'text-ink' : 'text-dim'}`}>{it.cost_usd ? usd(it.cost_usd) : 'free'}</span>
+      <span className={`mono text-sm pt-2.5 tabular-nums ${it.cost_usd ? 'text-ink' : 'text-dim'}`}>{it.cost_unknown ? 'price unknown' : it.cost_usd ? usd(it.cost_usd) : unknownPlaceCosts && ['activity', 'food', 'stop'].includes(it.category) ? 'price unknown' : 'free'}</span>
     </li>
   )
 }

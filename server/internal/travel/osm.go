@@ -126,8 +126,9 @@ func (p *Places) openStreetMap(ctx context.Context, at LatLng, kind string, limi
 		}
 		seen[strings.ToLower(name)] = true
 		kindTag := firstNonEmpty(e.Tags["amenity"], e.Tags["tourism"], e.Tags["leisure"], e.Tags["historic"])
+		price, priced := osmPriceUSD[kindTag]
 		cands = append(cands, Place{
-			Name: name, Category: kind, PriceUSD: osmPriceUSD[kindTag],
+			Name: name, Category: kind, PriceUSD: price, PriceUnknown: !priced && kind != "rest_stop",
 			Location: LatLng{Lat: lat, Lng: lng}, Note: osmNote(e.Tags), Source: "osm",
 		})
 	}

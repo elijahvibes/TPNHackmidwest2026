@@ -5,17 +5,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"math"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// Places finds things to do and stops along a route. Google Places (new API)
-// when GOOGLE_PLACES_KEY is set, otherwise curated mock results.
+// Places prefers Geoapify, then Google; mock results remain explicitly labeled.
 type Places struct {
-	key    string
-	http   *http.Client
-	osm    bool   // real-data-only mode: Google, then OpenStreetMap, never mock
-	ranker Ranker // optional AI that picks among real OSM candidates
+	key      string
+	http     *http.Client
+	geoapify *Geoapify
+	osm      bool   // real-data-only mode: Geoapify, Google, then OpenStreetMap, never mock
+	ranker   Ranker // optional AI that picks among real OSM candidates
+}
+
+func NewPlacesWithGeoapify(googleKey, geoapifyKey string) *Places {
+	p := NewPlaces(googleKey)
+	if strings.TrimSpace(geoapifyKey) != "" {
+		p.geoapify = NewGeoapify(geoapifyKey)
+	}
+	return p
 }
 
 func NewPlaces(key string) *Places {
@@ -25,6 +36,22 @@ func NewPlaces(key string) *Places {
 // Nearby returns up to limit places of the given kind near a point.
 // kind: "attraction" | "food" | "rest_stop"
 func (p *Places) Nearby(ctx context.Context, at LatLng, kind string, limit int) []Place {
+	if p.geoapify != nil {
+		places, err := p.geoapify.Nearby(ctx, at, kind, limit)
+		if err == nil {
+			return places // a real empty answer stays empty
+		}
+		log.Printf("places: %v", err)
+		if !p.osm {
+			log.Printf("places: using labeled mock results")
+			places = mockPlaces(at, kind, limit)
+			for i := range places {
+				places[i].Note = "Geoapify unavailable; mock place, not a real recommendation"
+			}
+			return places
+		}
+		// real-data mode: fall through to Google / OpenStreetMap
+	}
 	if p.key != "" {
 		if res := p.google(ctx, at, kind, limit); len(res) > 0 {
 			return res
@@ -36,9 +63,48 @@ func (p *Places) Nearby(ctx context.Context, at LatLng, kind string, limit int) 
 	return mockPlaces(at, kind, limit)
 }
 
+func (p *Places) Explore(ctx context.Context, at LatLng, kind string, limit int, miles float64) []Place {
+	if !validGeoPoint(at) || math.IsNaN(miles) || math.IsInf(miles, 0) || miles < 1 || miles > 150 || limit < 1 || limit > 500 {
+		log.Printf("places: invalid exploration coordinates, radius or result limit")
+		return nil
+	}
+	within := func(places []Place) []Place {
+		out := make([]Place, 0, len(places))
+		for _, place := range places {
+			if haversineMiles(at, place.Location) <= miles {
+				out = append(out, place)
+			}
+		}
+		return out
+	}
+	if p.geoapify == nil {
+		return within(p.Nearby(ctx, at, kind, limit))
+	}
+	places, err := p.geoapify.Explore(ctx, at, kind, limit, miles*1609.34)
+	if err != nil {
+		log.Printf("places: %v", err)
+		if p.osm {
+			// real-data mode: Google / OpenStreetMap instead of mock
+			return within(p.Nearby(ctx, at, kind, limit))
+		}
+		log.Printf("places: using labeled mock exploration results")
+		places = mockPlaces(at, kind, limit)
+		for i := range places {
+			places[i].Note = "Geoapify unavailable; mock place, not a real recommendation"
+		}
+	}
+	out := make([]Place, 0, len(places))
+	for _, place := range places {
+		if haversineMiles(at, place.Location) <= miles {
+			out = append(out, place)
+		}
+	}
+	return out
+}
+
 var googleTypes = map[string][]string{
 	"attraction": {"tourist_attraction", "museum", "park"},
-	"food":       {"restaurant", "cafe"},
+	"food":       {"restaurant"},
 	"rest_stop":  {"gas_station", "rest_stop"},
 	// interest-driven kinds (from the trip form)
 	"outdoors":  {"park", "hiking_area", "national_park", "campground"},
@@ -67,7 +133,7 @@ func (p *Places) google(ctx context.Context, at LatLng, kind string, limit int) 
 	req, _ := http.NewRequestWithContext(ctx, "POST", "https://places.googleapis.com/v1/places:searchNearby", bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Goog-Api-Key", p.key)
-	req.Header.Set("X-Goog-FieldMask", "places.displayName,places.rating,places.priceLevel,places.location")
+	req.Header.Set("X-Goog-FieldMask", "places.displayName,places.rating,places.priceLevel,places.location,places.types")
 	res, err := p.http.Do(req)
 	if err != nil {
 		return nil
@@ -78,8 +144,9 @@ func (p *Places) google(ctx context.Context, at LatLng, kind string, limit int) 
 			DisplayName struct {
 				Text string `json:"text"`
 			} `json:"displayName"`
-			Rating     float64 `json:"rating"`
-			PriceLevel string  `json:"priceLevel"`
+			Rating     float64  `json:"rating"`
+			Types      []string `json:"types"`
+			PriceLevel string   `json:"priceLevel"`
 			Location   struct {
 				Latitude  float64 `json:"latitude"`
 				Longitude float64 `json:"longitude"`
@@ -92,7 +159,7 @@ func (p *Places) google(ctx context.Context, at LatLng, kind string, limit int) 
 	places := make([]Place, 0, len(out.Places))
 	for _, g := range out.Places {
 		places = append(places, Place{
-			Name: g.DisplayName.Text, Category: kind, Rating: g.Rating,
+			Name: g.DisplayName.Text, Category: kind, Categories: g.Types, Rating: g.Rating,
 			PriceUSD: priceLevelUSD(g.PriceLevel),
 			Location: LatLng{Lat: g.Location.Latitude, Lng: g.Location.Longitude},
 			Source:   "google",

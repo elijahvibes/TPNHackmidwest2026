@@ -1,17 +1,19 @@
 import type { Plan } from './api'
+import { destinationTransport, roadStops } from './transport.ts'
 
 const sourceLabels: Record<string, string> = {
   route: 'Driving route', gas: 'Gas price', flights: 'Flights', hotels: 'Hotels',
   places: 'Places', weather: 'Weather', safety: 'Safety', ai: 'Itinerary',
+  local_transport: 'Destination transportation',
 }
 
 export function planDataWarnings(plan: Plan): string[] {
   const warnings = new Set<string>()
   const check = (label: string, source: string | undefined) => {
     if (!source) return
-    if (/mock/i.test(source)) warnings.add(`${label}: mock data in use.`)
-    else if (/fallback|estimate/i.test(source)) warnings.add(`${label}: fallback data or estimates, not live results.`)
-    else if (/built-in|national average/i.test(source)) warnings.add(`${label}: static built-in data, not a live API.`)
+    if (/mock/i.test(source)) warnings.add(`${label}: mock data is being used.`)
+    else if (/fallback|estimate/i.test(source)) warnings.add(`${label}: fallback data or estimates are being used, not live results.`)
+    else if (/built-in|national average/i.test(source)) warnings.add(`${label}: static built-in data is being used, not a live API.`)
   }
 
   for (const [key, source] of Object.entries(plan.sources)) {
@@ -22,20 +24,29 @@ export function planDataWarnings(plan: Plan): string[] {
   check('Flights', plan.selected_return?.source)
   for (const hotel of plan.hotels) check('Hotels', hotel.source)
   for (const [label, places] of [
-    ['Attractions', plan.activities], ['Restaurants', plan.food], ['Rest stops', plan.stops],
+    ['Attractions', plan.activities], ['Restaurants', plan.food], ['Rest stops', roadStops(plan)],
   ] as const) {
     for (const place of places ?? []) check(label, place.source)
   }
   check('Weather', plan.weather?.source)
   check('Safety', plan.safety?.source)
   if (plan.sources.safety === 'fbi-ucr' && !/built-in|national average/i.test(plan.safety?.source ?? '')) {
-    warnings.add('Safety: static built-in data, not a live API.')
+    warnings.add('Safety: static built-in data is being used, not a live API.')
   }
-  if ([...(plan.activities ?? []), ...(plan.food ?? []), ...(plan.stops ?? [])].some(p => p.source === 'google' || p.source === 'osm')) {
-    warnings.add('Place costs: estimated from Google price levels or typical prices, not admission or menu prices. A cost of zero can mean the price is unknown.')
+  if ([...(plan.activities ?? []), ...(plan.food ?? []), ...roadStops(plan)].some(p => p.source === 'google' || p.source === 'osm')) {
+    warnings.add('Place costs: estimated from Google price levels or typical prices, not actual admission or menu prices. A zero cost can mean the price is unknown, not free.')
   }
   if (!plan.ai_generated) {
     warnings.add('Itinerary: rule-based, not written by AI.')
+  }
+  if (plan.local_transport) {
+    const costs = destinationTransport(plan) === 'own car' ? 'parking and local fuel'
+      : destinationTransport(plan) === 'rental car' ? 'rental, fares, parking and local fuel'
+        : 'fares and any additional transfers'
+    warnings.add(`Destination transportation: ${costs} costs are excluded from totals. Activity distance is not verified travel time.`)
+  }
+  if ([...(plan.activities ?? []), ...(plan.food ?? []), ...roadStops(plan)].some(p => p.source === 'geoapify')) {
+    warnings.add('Geoapify place prices are unknown and excluded from totals. No ratings or admission/menu prices are provided; these places are not necessarily free.')
   }
   return [...warnings]
 }
@@ -56,11 +67,15 @@ export function planRealData(plan: Plan): string[] {
   }
   quotes('Hotels', plan.hotels, 'Google Hotels via SerpApi', 'serpapi')
   for (const [label, places] of [
-    ['Attractions', plan.activities], ['Restaurants', plan.food], ['Rest stops', plan.stops],
+    ['Attractions', plan.activities], ['Restaurants', plan.food], ['Rest stops', roadStops(plan)],
   ] as const) {
     const count = (places ?? []).filter(place => place.source === 'google').length
     if (count > 0) {
       real.push(`${label}: ${count} of ${places.length} places from Google Places (names, locations and available ratings; costs are estimates).`)
+    }
+    const geoCount = (places ?? []).filter(place => place.source === 'geoapify').length
+    if (geoCount > 0) {
+      real.push(`${label}: ${geoCount} of ${places.length} places from Geoapify / OpenStreetMap (real names and locations; prices and ratings unavailable).`)
     }
     const osm = (places ?? []).filter(place => place.source === 'osm').length
     if (osm > 0) {

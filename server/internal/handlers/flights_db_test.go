@@ -56,6 +56,7 @@ func TestSavedFlightSelectionPersistsAndChecksOwnership(t *testing.T) {
 	}()
 	plan := planner.Plan{
 		Nights: 1, Days: []planner.Day{{Day: 1}, {Day: 2}}, Travelers: 2, BudgetUSD: 1000,
+		LocalTransport: "rental_car", ActivityRadiusMiles: 50,
 		OriginName: "Kansas City", DestinationName: "Chicago", Sources: map[string]string{"flights": "serpapi"},
 		Flights: []travel.FlightQuote{
 			{Carrier: "First", Origin: "MCI", Destination: "ORD", Depart: "2026-11-10", Return: "2026-11-11", PriceUSD: 200, DurationMin: 120},
@@ -107,6 +108,9 @@ func TestSavedFlightSelectionPersistsAndChecksOwnership(t *testing.T) {
 	}
 	if out.SelectedFlight != 1 || out.SelectedReturn == nil || out.SelectedReturn.BookingToken != "test-return" || out.TotalUSD != 700 {
 		t.Fatalf("selection not persisted: %+v", out)
+	}
+	if out.LocalTransport != "rental_car" || out.ActivityRadiusMiles != 50 {
+		t.Fatalf("saved flight selection lost mobility preferences: %+v", out)
 	}
 	if _, err := pool.ExecContext(ctx, "UPDATE trips SET status='booked' WHERE id=?", tripID); err != nil {
 		t.Fatal(err)

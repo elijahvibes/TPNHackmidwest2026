@@ -14,6 +14,12 @@ test('no warning for live sources without static or estimated data', () => {
   assert.deepEqual(planDataWarnings(livePlan()), [])
 })
 
+test('destination transport remains unquoted even with real providers', () => {
+  const plan = {...livePlan(), local_transport: 'rental_car', activity_radius_miles: 50}
+  assert.ok(planDataWarnings(plan).some(w => w.includes('local fuel costs are excluded')))
+  assert.ok(!planRealData(plan).some(w => w.startsWith('Destination transportation')))
+})
+
 test('mixed live/mock places are detected even when the summary source is Google', () => {
   const plan = livePlan()
   plan.activities = [{ source: 'google' }]
@@ -110,4 +116,13 @@ test('real return selection, forecast coverage and AI narrative are explicitly i
   assert.ok(real.includes('Selected return flight: Google Flights via SerpApi.'))
   assert.ok(real.includes('Weather: 2 trip days with National Weather Service forecasts.'))
   assert.ok(real.some(detail => detail.startsWith('Itinerary narrative: AI-generated')))
+})
+
+test('Geoapify real locations are disclosed without claiming ratings or prices', () => {
+  const plan = livePlan()
+  plan.activities = [{ source: 'geoapify', price_unknown: true }, { source: 'mock' }]
+  const real = planRealData(plan)
+  assert.ok(real.some(w => w.includes('Attractions: 1 of 2 places from Geoapify / OpenStreetMap')))
+  assert.ok(planDataWarnings(plan).includes('Attractions: mock data is being used.'))
+  assert.ok(planDataWarnings(plan).some(w => w.includes('prices are unknown and excluded from totals')))
 })

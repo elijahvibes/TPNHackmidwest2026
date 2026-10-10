@@ -149,19 +149,43 @@ func (d *Deps) planTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var extra struct {
-		VehicleMPG float64        `json:"vehicle_mpg"`
-		Interests  []string       `json:"interests"`
-		Mode       string         `json:"mode"`       // re-plan as drive/fly/auto; persisted on the trip
-		OriginLoc  *travel.LatLng `json:"origin_loc"` // pinned points from the form's autocomplete
-		DestLoc    *travel.LatLng `json:"dest_loc"`
+		VehicleMPG          float64        `json:"vehicle_mpg"`
+		Interests           []string       `json:"interests"`
+		Mode                string         `json:"mode"`       // re-plan as drive/fly/auto; persisted on the trip
+		OriginLoc           *travel.LatLng `json:"origin_loc"` // pinned points from the form's autocomplete
+		DestLoc             *travel.LatLng `json:"dest_loc"`
+		LocalTransport      string         `json:"local_transport"`
+		ActivityRadiusMiles float64        `json:"activity_radius_miles"`
 	}
-	_ = httpx.Decode(r, &extra) // body optional
-	if extra.Mode == "drive" || extra.Mode == "fly" || extra.Mode == "auto" {
-		t.Mode = extra.Mode
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := httpx.Decode(r, &extra); err != nil {
+			httpx.Error(w, 400, "invalid planning preferences")
+			return
+		}
+		if extra.Mode == "drive" || extra.Mode == "fly" || extra.Mode == "auto" {
+			t.Mode = extra.Mode
+		}
+	}
+	if len(t.Plan) > 0 {
+		var previous planner.Plan
+		if err := json.Unmarshal(t.Plan, &previous); err != nil {
+			httpx.Error(w, 500, "could not read saved planning preferences")
+			return
+		}
+		if extra.LocalTransport == "" {
+			extra.LocalTransport = previous.LocalTransport
+		}
+		if extra.ActivityRadiusMiles == 0 {
+			extra.ActivityRadiusMiles = previous.ActivityRadiusMiles
+		}
+		if extra.Interests == nil {
+			extra.Interests = previous.Interests
+		}
 	}
 	req := planner.Request{
 		Origin: t.Origin, Destination: t.Destination, StartDate: t.StartDate, EndDate: t.EndDate,
 		Travelers: t.Travelers, Mode: t.Mode, VehicleMPG: extra.VehicleMPG, Interests: extra.Interests,
+		LocalTransport: extra.LocalTransport, ActivityRadiusMiles: extra.ActivityRadiusMiles,
 		OriginLoc: extra.OriginLoc, DestLoc: extra.DestLoc,
 	}
 	if t.BudgetUSD != nil {
