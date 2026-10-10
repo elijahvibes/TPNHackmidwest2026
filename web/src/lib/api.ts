@@ -11,6 +11,13 @@ export type User = {
 
 export type LatLng = { lat: number; lng: number }
 
+/** A resolved place: what the user typed turned into a point plus a label to show back. */
+export type Placemark = LatLng & {
+  label: string; name: string; region: string; country: string; source: string
+}
+
+export type Airport = LatLng & { code: string; name: string; city: string; distance_miles: number }
+
 export type FlightQuote = {
   carrier: string; origin: string; destination: string; depart: string; return?: string
   price_usd: number; stops: number; duration_min: number; source: string
@@ -32,7 +39,7 @@ export type BookingOption = {
 }
 export type HotelQuote = {
   name: string; rating: number; nightly_usd: number; nights: number; total_usd: number
-  kind: string; distance_km: number; source: string
+  kind: string; distance_km: number; location: LatLng; area?: string; amenities?: string[]; url?: string; source: string
 }
 export type DriveEstimate = {
   distance_miles: number; duration_min: number; gallons_needed: number; gas_price_usd: number
@@ -48,7 +55,8 @@ export type PlanOption = {
 export type DayWeather = { date: string; label: string; high_f: number; low_f: number; short: string; precip_pct: number; icon: string }
 export type Weather = { place: string; days: DayWeather[]; note?: string; source: string }
 export type Safety = { city: string; violent_per_100k: number; level: 'low' | 'moderate' | 'elevated'; score: number; tips: string[]; source: string }
-export type DayItem = { time: string; title: string; detail?: string; cost_usd: number; category: string }
+export type ItemCategory = 'transport' | 'lodging' | 'activity' | 'food' | 'stop'
+export type DayItem = { time: string; title: string; detail?: string; cost_usd: number; category: ItemCategory }
 export type Day = { day: number; date: string; theme: string; items: DayItem[] }
 
 export type Plan = {
@@ -56,7 +64,10 @@ export type Plan = {
   drive: DriveEstimate; flights: FlightQuote[]; hotels: HotelQuote[]
   stops: Place[]; activities: Place[]; food: Place[]; days: Day[]
   total_usd: number; under_budget: boolean; nights: number
-  origin_loc: LatLng; dest_loc: LatLng; ai_generated: boolean
+  origin_loc: LatLng; dest_loc: LatLng
+  origin_place: Placemark; dest_place: Placemark
+  origin_airport?: Airport; dest_airport?: Airport
+  ai_generated: boolean
   weather: Weather; safety: Safety
   sources: Record<string, string>; generated_at: string
   travelers?: number; budget_usd?: number; selected_flight?: number; selected_return?: FlightQuote
@@ -77,8 +88,10 @@ export type Payment = {
 export type PlanRequest = {
   origin: string; destination: string; start_date: string; end_date: string
   travelers: number; budget_usd?: number; mode?: string; vehicle_mpg?: number
-  interests?: string[]; origin_loc?: LatLng
+  interests?: string[]; origin_loc?: LatLng; dest_loc?: LatLng
 }
+
+export type PlanExtra = { vehicle_mpg?: number; interests?: string[]; mode?: string; origin_loc?: LatLng; dest_loc?: LatLng }
 
 const TOKEN_KEY = 'tpn.token'
 export const token = {
@@ -92,11 +105,11 @@ export class ApiError extends Error {
   constructor(status: number, message: string) { super(message); this.status = status }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const t = token.get()
   if (t) headers.Authorization = `Bearer ${t}`
-  const res = await fetch(`/api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+  const res = await fetch(`/api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal })
   if (res.status === 204) return undefined as T
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -123,6 +136,10 @@ export const api = {
     request<{ mpg: number; source: string; note?: string }>(
       'GET', `/vehicles/mpg?year=${year}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}`),
 
+  /** City/town/park autocomplete. Any place, not just the demo list. */
+  geoSuggest: (q: string, signal?: AbortSignal) =>
+    request<Placemark[]>('GET', `/geo/suggest?q=${encodeURIComponent(q)}`, undefined, signal),
+
   planPreview: (req: PlanRequest) => request<Plan>('POST', '/plan/preview', req),
   selectPreviewFlight: (plan: Plan, flight_index: number, return_token?: string) =>
     request<Plan>('POST', '/plan/flight', { plan, flight_index, return_token }),
@@ -135,11 +152,13 @@ export const api = {
 
   trips: () => request<Trip[]>('GET', '/trips'),
   trip: (id: string) => request<Trip>('GET', `/trips/${id}`),
-  createTrip: (t: Omit<PlanRequest, 'origin_loc' | 'vehicle_mpg' | 'interests'> & { title?: string }) =>
+  createTrip: (t: Omit<PlanRequest, 'origin_loc' | 'dest_loc' | 'vehicle_mpg' | 'interests'> & { title?: string }) =>
     request<Trip>('POST', '/trips', t),
   deleteTrip: (id: string) => request<void>('DELETE', `/trips/${id}`),
-  planTrip: (id: string, extra?: { vehicle_mpg?: number; interests?: string[] }) =>
+  planTrip: (id: string, extra?: PlanExtra) =>
     request<Plan>('POST', `/trips/${id}/plan`, extra ?? {}),
+  chooseHotel: (id: string, name: string) =>
+    request<Plan>('POST', `/trips/${id}/hotel`, { name }),
 
   payments: () => request<Payment[]>('GET', '/payments'),
   pay: (trip_id: string, amount_usd: number, memo: string) =>
@@ -148,3 +167,41 @@ export const api = {
 
 export const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 export const hrs = (min: number) => `${Math.floor(min / 60)}h ${min % 60}m`
+
+/** "2026-11-06" → "Fri, Nov 6" (no timezone surprises: parse as local date). */
+export const fmtDate = (iso: string, opts: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' }) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', opts)
+}
+
+/**
+ * Client-side version of the server's ChooseHotel, for the stateless landing
+ * preview (nothing to persist there). Saved trips call api.chooseHotel instead.
+ */
+export function chooseHotelLocally(plan: Plan, name: string): Plan {
+  const idx = plan.hotels.findIndex(h => h.name === name)
+  if (idx < 0) return plan
+  const h = plan.hotels[idx]
+  const hotels = [h, ...plan.hotels.filter((_, i) => i !== idx)]
+  const options = plan.options.map(o => {
+    const total = Math.round((o.transport_usd + h.total_usd + o.activities_usd) * 100) / 100
+    const perNight = total / plan.nights
+    return {
+      ...o, lodging_usd: h.total_usd, total_usd: total,
+      value_score: Math.round((10000 / (perNight + 50) - o.travel_hours * 0.6) * 10) / 10,
+      factors: o.factors.map(f => f.endsWith('per night all-in') ? `$${perNight.toFixed(0)} per night all-in`
+        : f.includes('/night') ? `${h.name} ★${h.rating.toFixed(1)} at $${h.nightly_usd.toFixed(0)}/night` : f),
+    }
+  })
+  const rec = options.find(o => o.mode === plan.recommended_mode) ?? options[0]
+  const days = plan.days.map(d => ({
+    ...d,
+    items: d.items.map(it => it.category === 'lodging'
+      ? { ...it, title: `Check in: ${h.name}`, detail: `${h.nights} nights at $${h.nightly_usd.toFixed(0)}/night · ${h.area ?? ''}`, cost_usd: h.total_usd }
+      : it),
+  }))
+  const base = plan.summary.split(' Stay changed to ')[0]
+  const summary = `${base} Stay changed to ${h.name}; total now $${rec.total_usd.toFixed(0)}.`
+  return { ...plan, hotels, options, days, summary, total_usd: rec.total_usd }
+}

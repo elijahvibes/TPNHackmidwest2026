@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Safety, Weather } from '../lib/api'
+import { fmtDate, type Safety, type Weather } from '../lib/api'
 
 const ICON: Record<string, string> = { sun: '☀', cloud: '☁', rain: '🌧', snow: '❄', storm: '⛈', wind: '💨', fog: '🌫' }
 
@@ -11,10 +11,10 @@ export function WeatherStrip({ w }: { w: Weather }) {
         <h4 className="label">weather · {w.place}</h4>
         <span className={`tag ${w.source === 'nws' ? 'text-cyan' : 'text-dim'}`}>{w.source === 'nws' ? 'NWS forecast' : 'typical conditions'}</span>
       </div>
-      <div className="mt-3 flex gap-2 overflow-x-auto">
+      <div className="mt-3 flex gap-2 overflow-x-auto min-w-0 scrollbar-none">
         {w.days.map(d => (
-          <div key={d.date} className={`min-w-[96px] rounded-md border p-2 text-center ${d.precip_pct >= 50 ? 'border-cyan/50 bg-cyan/5' : 'border-line'}`}>
-            <div className="mono text-[10px] text-muted">{d.label?.slice(0, 3) || d.date.slice(5)}</div>
+          <div key={d.date} className={`w-[96px] shrink-0 rounded-md border p-2 text-center ${d.precip_pct >= 50 ? 'border-cyan/50 bg-cyan/5' : 'border-line'}`}>
+            <div className="mono text-[10px] text-muted">{fmtDate(d.date, { weekday: 'short' })} <span className="text-dim">{fmtDate(d.date, { day: 'numeric' })}</span></div>
             <div className="text-2xl leading-tight" aria-label={d.short}>{ICON[d.icon] ?? '☀'}</div>
             <div className="mono text-sm"><span className="text-ink">{d.high_f}°</span><span className="text-dim"> / {d.low_f}°</span></div>
             <div className="mono text-[10px] text-muted truncate" title={d.short}>{d.short}</div>

@@ -13,16 +13,12 @@ export default function Share() {
   if (err) return <div className="panel p-8 text-center mono text-rose">{err}</div>
   if (!trip?.plan) return <div className="mono text-muted">loading…</div>
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="mono text-xs text-muted prompt">tpn share</div>
-          <h1 className="mono text-2xl font-bold mt-1">{trip.title}</h1>
-          <div className="mono text-xs text-muted mt-1">{trip.start_date} → {trip.end_date} · {trip.travelers} traveler{trip.travelers > 1 ? 's' : ''} · shared read-only</div>
-        </div>
-        <Link to="/" className="btn-primary">plan your own →</Link>
+    <div className="grid gap-5">
+      <div className="flex items-center justify-between print:hidden">
+        <div className="mono text-xs text-muted">shared read-only · <span className="prompt">tpn share</span></div>
+        <Link to="/" className="btn-primary !py-1">plan your own →</Link>
       </div>
-      <PlanView plan={trip.plan} />
+      <PlanView plan={trip.plan} meta={{ travelers: trip.travelers, budget_usd: trip.budget_usd, status: trip.status }} />
     </div>
   )
 }

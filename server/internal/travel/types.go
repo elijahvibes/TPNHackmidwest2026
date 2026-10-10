@@ -58,14 +58,18 @@ type BookingOption struct {
 }
 
 type HotelQuote struct {
-	Name       string  `json:"name"`
-	Rating     float64 `json:"rating"`
-	NightlyUSD float64 `json:"nightly_usd"`
-	Nights     int     `json:"nights"`
-	TotalUSD   float64 `json:"total_usd"`
-	Kind       string  `json:"kind"` // hotel | rental
-	DistanceKm float64 `json:"distance_km"`
-	Source     string  `json:"source"`
+	Name       string   `json:"name"`
+	Rating     float64  `json:"rating"`
+	NightlyUSD float64  `json:"nightly_usd"`
+	Nights     int      `json:"nights"`
+	TotalUSD   float64  `json:"total_usd"`
+	Kind       string   `json:"kind"` // hotel | rental | inn | resort
+	DistanceKm float64  `json:"distance_km"`
+	Location   LatLng   `json:"location"`            // where it sits, for the map
+	Area       string   `json:"area,omitempty"`      // "Downtown", "near the airport"
+	Amenities  []string `json:"amenities,omitempty"` // short tags: "free breakfast", "pool"
+	URL        string   `json:"url,omitempty"`       // where to actually book / look it up
+	Source     string   `json:"source"`
 }
 
 type DriveEstimate struct {

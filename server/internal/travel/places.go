@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -173,21 +172,4 @@ func mockPlaces(at LatLng, kind string, limit int) []Place {
 		out = append(out, p)
 	}
 	return out
-}
-
-// IATA maps common US cities to airport codes for the demo.
-func IATA(city string) string {
-	m := map[string]string{
-		"kansas city": "MCI", "chicago": "ORD", "denver": "DEN", "st. louis": "STL", "st louis": "STL",
-		"nashville": "BNA", "minneapolis": "MSP", "omaha": "OMA", "dallas": "DFW", "austin": "AUS",
-		"new orleans": "MSY", "las vegas": "LAS", "los angeles": "LAX", "new york": "JFK", "miami": "MIA",
-		"orlando": "MCO", "seattle": "SEA", "san francisco": "SFO", "phoenix": "PHX", "atlanta": "ATL",
-	}
-	lc := strings.ToLower(city)
-	for k, v := range m {
-		if strings.Contains(lc, k) {
-			return v
-		}
-	}
-	return ""
 }

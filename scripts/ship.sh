@@ -3,8 +3,8 @@
 # instead of git pull on the box we tar the tracked files over SSH.
 #   scripts/ship.sh [user@host] [ssh-key]
 set -euo pipefail
-HOST="${1:-root@50.116.22.198}"
-KEY="${2:-$HOME/.ssh/tpn_ed25519}"
+HOST="${1:-root@172.239.49.30}"
+KEY="${2:-$HOME/.ssh/tpn_linode_ed25519}"
 S="ssh -i $KEY -o IdentitiesOnly=yes -o BatchMode=yes $HOST"
 cd "$(dirname "$0")/.."
 echo "== shipping $(git rev-parse --short HEAD) to $HOST"

@@ -1,23 +1,45 @@
-import { hrs, usd, type Plan } from '../lib/api'
+import { useState, type ReactNode } from 'react'
+import { fmtDate, usd, type Plan } from '../lib/api'
+import Itinerary from './Itinerary'
+import StayCard from './StayCard'
+import CostBreakdown from './CostBreakdown'
 import RouteMap from './RouteMap'
 import { SafetyCard, WeatherStrip } from './WeatherSafety'
 import FlightChooser from './FlightChooser'
 import DataWarning from './DataWarning'
 import { planDataWarnings, planRealData } from '../lib/dataWarnings'
 
-const catColor: Record<string, string> = {
-  transport: 'text-cyan', lodging: 'text-amber', activity: 'text-accent', food: 'text-rose', stop: 'text-muted',
-}
+export type PlanMeta = { travelers?: number; budget_usd?: number | null; status?: string }
 
-export default function PlanView({ plan, onSelectFlight, disabled }: {
-  plan: Plan; onSelectFlight?: (index: number, returnToken?: string) => Promise<void>; disabled?: boolean
+const MODE_ICON: Record<string, string> = { drive: '🚗', fly: '✈' }
+
+/**
+ * Itinerary-first plan page: the day-by-day schedule is the main column; the
+ * rail carries the stay, the money, the map and the conditions. Everything
+ * else (the raw lists, the data sources) sits below the fold.
+ */
+export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan, onSelectFlight, disabled, busy }: {
+  plan: Plan
+  meta?: PlanMeta
+  actions?: ReactNode
+  onChooseHotel?: (name: string) => Promise<void> | void
+  onReplan?: (mode: string) => void
+  onSelectFlight?: (index: number, returnToken?: string) => Promise<void>
+  disabled?: boolean
+  busy?: boolean
 }) {
-  const best = plan.options.find(o => o.mode === plan.recommended_mode) ?? plan.options[0]
   const realData = planRealData(plan)
+  const rec = plan.options.find(o => o.mode === plan.recommended_mode) ?? plan.options[0]
+  const first = plan.days[0]?.date, last = plan.days[plan.days.length - 1]?.date
+  const budget = meta?.budget_usd ?? undefined
+  const budgetLeft = budget ? budget - rec.transport_usd - rec.activities_usd : undefined
+  const live = Object.entries(plan.sources).filter(([, v]) => !['mock', 'fallback', 'estimate'].includes(v)).length
+  const [showSources, setShowSources] = useState(false)
+
   return (
     <div className="grid gap-6">
       <DataWarning details={planDataWarnings(plan)} />
-      <section aria-label="Real provider data" className="rounded-lg border-2 border-accent bg-accent/5 p-5">
+      <section aria-label="Real provider data" className="rounded-lg border-2 border-accent bg-accent/5 p-5 print:hidden">
         <h2 className="mono text-xl font-bold text-accent">REAL PROVIDER DATA USED IN THIS PLAN</h2>
         {realData.length > 0 ? (
           <ul className="mt-3 list-disc pl-5 grid gap-1 text-sm">
@@ -31,142 +53,92 @@ export default function PlanView({ plan, onSelectFlight, disabled }: {
           Saved results may be out of date. Real search prices are not guaranteed booking quotes.
         </p>
       </section>
-      {/* headline */}
-      <section className="panel p-5">
+      <header className="panel p-5 print:border-0 print:p-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="mono text-xl font-bold">{plan.title}</h2>
-            <p className="text-muted mt-2 max-w-2xl">{plan.summary}</p>
+          <div className="min-w-0">
+            <div className="mono text-xs text-muted prompt">tpn plan</div>
+            <h2 className="mono text-2xl sm:text-3xl font-bold mt-1 leading-tight">
+              <span>{plan.origin_place?.label ?? plan.title.split('→')[0]}</span>
+              <span className="text-accent mx-2">→</span>
+              <span>{plan.dest_place?.label ?? plan.title.split('→')[1]}</span>
+            </h2>
+            <div className="mono text-xs text-muted mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              {first && last && <span>{fmtDate(first)} – {fmtDate(last)}</span>}
+              <span>{plan.nights} night{plan.nights === 1 ? '' : 's'}</span>
+              {meta?.travelers && <span>{meta.travelers} traveler{meta.travelers > 1 ? 's' : ''}</span>}
+              <span className="text-ink">{MODE_ICON[plan.recommended_mode]} {plan.recommended_mode}</span>
+              {plan.recommended_mode === 'fly' && plan.origin_airport && plan.dest_airport && <span>{plan.origin_airport.code} → {plan.dest_airport.code}</span>}
+              {meta?.status && <span className={`tag ${meta.status === 'booked' ? 'text-accent' : ''}`}>{meta.status}</span>}
+            </div>
           </div>
           <div className="text-right">
             <div className="label">all-in estimate</div>
-            <div className={`mono text-3xl font-bold ${plan.under_budget ? 'text-accent' : 'text-rose'}`}>{usd(plan.total_usd)}</div>
-            <div className="mono text-[11px] text-muted">{plan.nights} nights · {plan.under_budget ? 'under budget' : 'over budget'}</div>
+            <div className={`mono text-4xl font-bold tabular-nums ${plan.under_budget ? 'text-accent' : 'text-rose'}`}>{usd(plan.total_usd)}</div>
+            <div className="mono text-[11px] text-muted">{usd(plan.total_usd / Math.max(plan.nights, 1))}/night · {budget ? (plan.under_budget ? 'under budget' : 'over budget') : 'no budget set'}</div>
+            {actions && <div className="flex flex-wrap justify-end gap-2 mt-3 print:hidden">{actions}</div>}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 mt-4">
-          <span className="tag">{plan.flight_selected ? 'selected' : 'best'}: <b className="text-accent">{plan.recommended_mode}</b></span>
-          {Object.entries(plan.sources).map(([k, v]) => (
-            <span key={k} className="tag">{k}: <span className={v === 'mock' || v === 'fallback' || v === 'estimate' ? 'text-dim' : 'text-cyan'}>{v}</span></span>
-          ))}
+        <p className="text-muted mt-4 max-w-3xl leading-relaxed">{plan.summary}</p>
+        <div className="flex flex-wrap items-center gap-2 mt-3 print:hidden">
           {plan.ai_generated
             ? <span className="tag text-accent">✦ itinerary by AI on Akamai</span>
-            : <span className="tag text-amber">itinerary: rule-based fallback (AI offline)</span>}
+            : <span className="tag text-amber">itinerary: rule-based (AI offline)</span>}
+          <button className="tag hover:text-ink" onClick={() => setShowSources(s => !s)} aria-expanded={showSources}>
+            {live}/{Object.keys(plan.sources).length} live data sources {showSources ? '▾' : '▸'}
+          </button>
+          {showSources && Object.entries(plan.sources).map(([k, v]) => (
+            <span key={k} className="tag">{k}: <span className={['mock', 'fallback', 'estimate'].includes(v) ? 'text-dim' : 'text-cyan'}>{v}</span></span>
+          ))}
         </div>
         {(plan.sources.flights === 'serpapi' || plan.sources.hotels === 'serpapi') && (
           <p className="text-dim text-xs mt-3">Flight and stay prices are Google Travel search results via SerpApi, not guaranteed booking quotes. Optional fees and final checkout prices may differ.</p>
         )}
-      </section>
+      </header>
 
-      {/* value comparison */}
-      <section className="grid sm:grid-cols-2 gap-4">
-        {plan.options.map(o => (
-          <div key={o.mode} className={`panel p-4 ${o.mode === best.mode ? 'border-accent' : ''}`}>
-            <div className="flex items-center justify-between">
-              <span className="mono font-bold uppercase">{o.mode}</span>
-              <span className="tag">value {o.value_score}</span>
-            </div>
-            <div className="mono text-2xl mt-2">{usd(o.total_usd)}</div>
-            <div className="text-muted text-sm mt-1">{o.why}</div>
-            {o.factors?.length > 0 && (
-              <ul className="mono text-[11px] text-dim mt-2 grid gap-0.5">
-                {o.factors.map((f, i) => <li key={i}>· {f}</li>)}
-              </ul>
-            )}
-            <dl className="mono text-xs grid grid-cols-3 gap-2 mt-3 text-muted">
-              <div><dt className="text-dim">transport</dt><dd>{usd(o.transport_usd)}</dd></div>
-              <div><dt className="text-dim">lodging</dt><dd>{usd(o.lodging_usd)}</dd></div>
-              <div><dt className="text-dim">travel time</dt><dd>{o.travel_hours}h</dd></div>
-            </dl>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid md:grid-cols-[2fr_1fr] gap-4">
-        <WeatherStrip w={plan.weather} />
-        <SafetyCard s={plan.safety} />
-      </section>
-
-      {plan.origin_loc && plan.dest_loc && (
-        <RouteMap
-          origin={plan.origin_loc} dest={plan.dest_loc} stops={plan.stops} activities={plan.activities}
-          originLabel={plan.title.split('→')[0]?.trim() || 'origin'} destLabel={plan.title.split('→')[1]?.trim() || 'destination'}
-        />
-      )}
-      {onSelectFlight && <FlightChooser key={plan.generated_at} plan={plan} onSelect={onSelectFlight} disabled={disabled} />}
-
-      {/* day by day */}
-      <section className="grid gap-3">
-        <h3 className="mono prompt text-sm text-muted">itinerary</h3>
-        {plan.days.map(d => (
-          <div key={d.day} className="panel p-4">
-            <div className="flex items-baseline gap-3">
-              <span className="mono text-accent font-bold">day {d.day}</span>
-              <span className="mono text-xs text-muted">{d.date}</span>
-              <span className="text-sm text-ink">{d.theme}</span>
-            </div>
-            <ul className="mt-3 grid gap-2">
-              {d.items.map((it, i) => (
-                <li key={i} className="grid grid-cols-[52px_1fr_auto] gap-3 text-sm">
-                  <span className="mono text-dim">{it.time}</span>
-                  <span>
-                    <span className={`mono text-[10px] uppercase mr-2 ${catColor[it.category] ?? 'text-muted'}`}>{it.category}</span>
-                    {it.title}
-                    {it.detail && <span className="text-muted"> — {it.detail}</span>}
-                  </span>
-                  <span className="mono text-muted">{it.cost_usd ? usd(it.cost_usd) : 'free'}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </section>
-
-      {/* raw data */}
-      <section className="grid md:grid-cols-3 gap-4">
-        <div className="panel p-4">
-          <h4 className="label">drive</h4>
-          <div className="mono text-sm mt-2 grid gap-1">
-            <div>{plan.drive.distance_miles} mi · {hrs(plan.drive.duration_min)}</div>
-            <div>{plan.drive.gallons_needed} gal @ ${plan.drive.gas_price_usd.toFixed(2)}/gal ({plan.drive.vehicle_mpg} mpg)</div>
-            <div className="text-accent">{usd(plan.drive.round_trip_usd)} round trip</div>
-          </div>
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
+        <div className="grid gap-6 min-w-0">
+          {onSelectFlight && <FlightChooser key={plan.generated_at} plan={plan} onSelect={onSelectFlight} disabled={disabled || busy} />}
+          <Itinerary plan={plan} />
+          <Explore plan={plan} />
         </div>
-        <div className="panel p-4">
-          <h4 className="label">flights</h4>
-          <p className="text-dim text-xs mt-1">Round trip per traveler</p>
-          <ul className="mono text-sm mt-2 grid gap-1">
-            {plan.flights.slice(plan.selected_flight ?? 0, (plan.selected_flight ?? 0) + 1).map((f, i) => (
-              <li key={i} className="flex justify-between"><span>{f.carrier} · {f.stops ? `${f.stops} stop` : 'nonstop'} · {hrs(f.duration_min)}</span><span className="text-accent">{usd(plan.selected_return?.price_usd ?? f.price_usd)}</span></li>
-            ))}
-            {plan.flights.length === 0 && <li className="text-dim">no airport match</li>}
-          </ul>
-        </div>
-        <div className="panel p-4">
-          <h4 className="label">stay</h4>
-          <ul className="mono text-sm mt-2 grid gap-1">
-            {plan.hotels.slice(0, 3).map((h, i) => (
-              <li key={i} className="flex justify-between gap-2"><span className="truncate">{h.name} <span className="text-dim">★{h.rating.toFixed(1)}</span></span><span className="text-accent whitespace-nowrap">{usd(h.nightly_usd)}/n</span></li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      <section className="grid md:grid-cols-3 gap-4">
-        {([['things to do', plan.activities], ['eat', plan.food], ['stops on the way', plan.stops]] as const).map(([title, list]) => (
-          <div key={title} className="panel p-4">
-            <h4 className="label">{title}</h4>
-            <ul className="text-sm mt-2 grid gap-1.5">
-              {list.map((p, i) => (
-                <li key={i} className="flex justify-between gap-2">
-                  <span>{p.name}{p.note && <span className="text-dim"> · {p.note}</span>}</span>
-                  <span className="mono text-muted whitespace-nowrap">{p.price_usd ? usd(p.price_usd) : 'free'}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </section>
+        <aside className="grid gap-4 min-w-0 [&>*]:min-w-0 lg:sticky lg:top-16 print:hidden">
+          <StayCard hotels={plan.hotels} budgetLeft={budgetLeft} onChoose={onChooseHotel} source={plan.sources.hotels} />
+          <CostBreakdown plan={plan} budget={budget} onReplan={onReplan} busy={busy} />
+          <RouteMap plan={plan} mode={plan.recommended_mode} />
+          <WeatherStrip w={plan.weather} />
+          <SafetyCard s={plan.safety} />
+        </aside>
+      </div>
     </div>
+  )
+}
+
+function Explore({ plan }: { plan: Plan }) {
+  const groups = [
+    { title: 'things to do', list: plan.activities, color: 'text-accent' },
+    { title: 'eat', list: plan.food, color: 'text-amber' },
+    { title: 'stops on the way', list: plan.stops, color: 'text-muted' },
+  ].filter(g => g.list.length)
+  if (!groups.length) return null
+  return (
+    <section className="grid sm:grid-cols-3 gap-4 print:break-inside-avoid">
+      {groups.map(g => (
+        <div key={g.title} className="panel p-4">
+          <h4 className="label">{g.title}</h4>
+          <ul className="text-sm mt-2 grid gap-1.5">
+            {g.list.map((p, i) => (
+              <li key={i} className="flex justify-between gap-2">
+                <span className="min-w-0">
+                  <span className="text-ink">{p.name}</span>
+                  {p.rating > 0 && <span className={`mono text-[10px] ml-1.5 ${g.color}`}>★{p.rating.toFixed(1)}</span>}
+                  {p.note && <div className="text-[12px] text-dim">{p.note}</div>}
+                </span>
+                <span className="mono text-xs text-muted whitespace-nowrap">{p.price_usd ? usd(p.price_usd) : 'free'}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   )
 }

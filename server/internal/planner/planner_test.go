@@ -31,10 +31,17 @@ func (fixtureSearch) Flights(_ context.Context, origin, dest, depart, ret string
 }
 
 func (fixtureSearch) Hotels(_ context.Context, _ string, _, _ string, nights, _ int) ([]travel.HotelQuote, error) {
-	return []travel.HotelQuote{{
-		Name: "Test hotel", Rating: 4, NightlyUSD: 100, TotalUSD: float64(nights) * 100,
-		Nights: nights, Kind: "hotel", Source: "serpapi",
-	}}, nil
+	stay := func(name string, rating, nightly float64, kind string) travel.HotelQuote {
+		return travel.HotelQuote{
+			Name: name, Rating: rating, NightlyUSD: nightly, TotalUSD: float64(nights) * nightly,
+			Nights: nights, Kind: kind, Source: "serpapi",
+		}
+	}
+	return []travel.HotelQuote{
+		stay("Test hotel", 4, 100, "hotel"),
+		stay("Budget inn", 3, 70, "hotel"),
+		stay("Test rental", 4.5, 160, "rental"),
+	}, nil
 }
 
 // Travel search fixtures exercise scoring offline without production mock quotes.
@@ -248,6 +255,117 @@ func TestPlanUsesBrowserLocation(t *testing.T) {
 
 	if plan.OriginLoc.Lat != 39.0 {
 		t.Errorf("origin loc not used: %+v", plan.OriginLoc)
+	}
+}
+
+func TestAnyCityGetsNearestAirport(t *testing.T) {
+	p := newOffline()
+	plan, err := p.Plan(context.Background(), Request{
+		Origin: "Lawrence, KS", Destination: "Estes Park, CO", StartDate: "2026-11-06", EndDate: "2026-11-09", Travelers: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.OriginPlace.Label != "Lawrence, KS" || plan.DestPlace.Label != "Estes Park, CO" {
+		t.Errorf("places = %q → %q", plan.OriginPlace.Label, plan.DestPlace.Label)
+	}
+	if plan.Title != "Lawrence, KS → Estes Park, CO" {
+		t.Errorf("title = %q", plan.Title)
+	}
+	if plan.OriginAirport == nil || plan.OriginAirport.Code != "MCI" || plan.DestAirport == nil || plan.DestAirport.Code != "DEN" {
+		t.Fatalf("airports = %+v / %+v", plan.OriginAirport, plan.DestAirport)
+	}
+	if len(plan.Flights) == 0 || plan.Flights[0].Origin != "MCI" {
+		t.Errorf("flights should be priced MCI→DEN: %+v", first(plan.Flights))
+	}
+	if plan.Sources["geocode"] != "gazetteer" {
+		t.Errorf("geocode source = %q", plan.Sources["geocode"])
+	}
+	// Flying from a town 45 mi from its airport costs extra door-to-door hours.
+	var fly *Option
+	for i := range plan.Options {
+		if plan.Options[i].Mode == "fly" {
+			fly = &plan.Options[i]
+		}
+	}
+	if fly == nil {
+		t.Fatal("no fly option")
+	}
+	found := false
+	for _, f := range fly.Factors {
+		if strings.Contains(f, "MCI is") || strings.Contains(f, "DEN is") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("fly factors should mention the airport drive: %v", fly.Factors)
+	}
+}
+
+func TestPinnedDestinationSkipsGeocoding(t *testing.T) {
+	p := newOffline()
+	plan, err := p.Plan(context.Background(), Request{
+		Origin: "Kansas City", Destination: "Lake Nobody, KS", DestLoc: &travel.LatLng{Lat: 38.5, Lng: -96.0},
+		StartDate: "2026-11-06", EndDate: "2026-11-07", Travelers: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.DestPlace.Label != "Lake Nobody, KS" || plan.DestLoc.Lat != 38.5 {
+		t.Errorf("pinned destination not honored: %+v", plan.DestPlace)
+	}
+}
+
+func TestChooseHotelRetotals(t *testing.T) {
+	p := newOffline()
+	plan, err := p.Plan(context.Background(), Request{
+		Origin: "Omaha", Destination: "Denver", StartDate: "2026-11-06", EndDate: "2026-11-09", Travelers: 2, BudgetUSD: 1500,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Hotels) < 2 {
+		t.Fatal("need alternatives")
+	}
+	alt := plan.Hotels[len(plan.Hotels)-1]
+	before := plan.TotalUSD
+	if err := plan.ChooseHotel(alt.Name, 1500); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Hotels[0].Name != alt.Name {
+		t.Errorf("chosen hotel not first: %s", plan.Hotels[0].Name)
+	}
+	var rec *Option
+	for i := range plan.Options {
+		if plan.Options[i].LodgingUSD != alt.TotalUSD {
+			t.Errorf("option %s lodging %.0f != %.0f", plan.Options[i].Mode, plan.Options[i].LodgingUSD, alt.TotalUSD)
+		}
+		if plan.Options[i].Mode == plan.RecommendedMode {
+			rec = &plan.Options[i]
+		}
+	}
+	if rec == nil || plan.TotalUSD != rec.TotalUSD {
+		t.Errorf("plan total %.0f should follow the recommended option", plan.TotalUSD)
+	}
+	if plan.TotalUSD == before && plan.Hotels[0].TotalUSD != plan.Hotels[1].TotalUSD {
+		t.Error("total did not change after swapping hotels")
+	}
+	checkin := false
+	for _, d := range plan.Days {
+		for _, it := range d.Items {
+			if it.Category == "lodging" {
+				checkin = true
+				if !strings.Contains(it.Title, alt.Name) || it.CostUSD != alt.TotalUSD {
+					t.Errorf("check-in line not rewritten: %+v", it)
+				}
+			}
+		}
+	}
+	if !checkin {
+		t.Error("itinerary has no lodging item")
+	}
+	if err := plan.ChooseHotel("Nope Hotel", 0); err == nil {
+		t.Error("unknown hotel should error")
 	}
 }
 
