@@ -252,7 +252,7 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'Plan my trip',
       </div>
 
       <TripGlance
-        origin={originPin?.name ?? v.origin} destination={destPin?.name ?? v.destination}
+        origin={originPin?.name ?? v.origin} destination={destPin?.name ?? v.destination} destKind={destPin?.kind}
         start={v.start_date} end={v.end_date} nights={nights} travelers={v.travelers} budget={v.budget_usd}
         style={styleLine} dateErr={dateErr}
         action={

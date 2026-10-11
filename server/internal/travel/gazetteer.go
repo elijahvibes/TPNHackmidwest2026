@@ -14,6 +14,9 @@ type Placemark struct {
 	Country string `json:"country"` // "US"
 	LatLng
 	Source string `json:"source"` // gazetteer | photon | nominatim | mapbox | gps
+	// Coarse place type from the geocoder (city | town | village | park | island | locality).
+	// The UI refines it from the name to pick an illustrative photo.
+	Kind string `json:"kind,omitempty"`
 }
 
 type gazEntry struct {
@@ -262,7 +265,7 @@ func buildGazIndex() gazIndex {
 }
 
 func (e gazEntry) placemark() Placemark {
-	return Placemark{Label: e.name + ", " + e.state, Name: e.name, Region: e.state, Country: "US", LatLng: e.ll, Source: "gazetteer"}
+	return Placemark{Label: e.name + ", " + e.state, Name: e.name, Region: e.state, Country: "US", LatLng: e.ll, Source: "gazetteer", Kind: "city"}
 }
 
 // lookupGazetteer returns an exact match for a typed place, if any.

@@ -9,6 +9,7 @@ import FlightChooser from './FlightChooser'
 import DataWarning, { EstimatesNote } from './DataWarning'
 import { AgentsCard, ResearchCard } from './AgentsPanel'
 import Icon from './Icon'
+import { PlacePicture } from './TripGlance'
 import { planDataWarnings, planEstimates, planRealData } from '../lib/dataWarnings'
 import { placeMapLink } from '../lib/placeLinks'
 import { destinationTransport, roadStops } from '../lib/transport'
@@ -58,31 +59,15 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
         </p>
       </section>
       <header className="panel px-6 sm:px-8 py-7 print:border-0 print:p-0">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div className="min-w-0">
-            <div className="eyebrow">Your plan</div>
-            <h2 className="text-[34px] sm:text-[40px] leading-tight mt-1">{destName ? `${destName} Trip` : plan.title}</h2>
-            <div className="text-[14px] text-muted mt-1 flex items-center gap-2">
-              <span>{plan.origin_place?.label ?? plan.title.split('→')[0]}</span>
-              <Icon name="arrow" size={14} />
-              <span>{plan.dest_place?.label ?? plan.title.split('→')[1]}</span>
-            </div>
-            <div className="text-[13px] text-muted mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-              {first && last && <span className="flex items-center gap-1.5"><Icon name="calendar" size={14} />{fmtDate(first)} – {fmtDate(last)} · {plan.nights} night{plan.nights === 1 ? '' : 's'}</span>}
-              {meta?.travelers && <span className="flex items-center gap-1.5"><Icon name="users" size={14} />{meta.travelers} traveler{meta.travelers > 1 ? 's' : ''}</span>}
-              <span className="flex items-center gap-1.5 text-ink"><Icon name={plan.recommended_mode === 'fly' ? 'plane' : 'car'} size={14} /><span className="capitalize">{plan.recommended_mode}</span>
-                {plan.recommended_mode === 'fly' && plan.origin_airport && plan.dest_airport && <span className="text-muted">{plan.origin_airport.code} → {plan.dest_airport.code}</span>}</span>
-              {meta?.status && <span className={`tag capitalize ${meta.status === 'booked' ? 'text-accent border-accent/50 bg-accent-soft' : ''}`}>{meta.status}</span>}
-            </div>
-          </div>
-          <div className="rounded-lg bg-accent-soft/70 px-5 py-4 min-w-[260px]">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">{unknownCosts ? 'All-in estimate · some places unpriced' : 'All-in estimate'}</div>
-            <div className={`serif text-[36px] leading-none mt-1 tabular-nums ${plan.under_budget ? 'text-ink' : 'text-rose'}`}>{usd(plan.total_usd)}</div>
-            <div className="text-[13px] text-muted mt-1.5">{usd(plan.total_usd / Math.max(plan.nights, 1))} / night · {budget ? (plan.under_budget ? 'under budget' : 'over budget') : 'no budget set'}{estimates.length > 0 && ' · includes estimates'}</div>
-            {actions && <div className="flex flex-wrap gap-2 mt-4 print:hidden">{actions}</div>}
-          </div>
+        <div className="eyebrow">Your plan</div>
+        <h2 className="text-[34px] sm:text-[40px] leading-tight mt-1">{destName ? `${destName} Trip` : plan.title}</h2>
+        <div className="text-[14px] text-muted mt-1 flex items-center gap-2">
+          <span>{plan.origin_place?.label ?? plan.title.split('→')[0]}</span>
+          <Icon name="arrow" size={14} />
+          <span>{plan.dest_place?.label ?? plan.title.split('→')[1]}</span>
+          {meta?.status && <span className={`tag capitalize ml-1 ${meta.status === 'booked' ? 'text-accent border-accent/50 bg-accent-soft' : ''}`}>{meta.status}</span>}
         </div>
-        <p className="text-[15px] text-muted mt-5 max-w-3xl leading-relaxed">{plan.summary}</p>
+        <p className="text-[15px] text-muted mt-4 max-w-3xl leading-relaxed">{plan.summary}</p>
         <div className="flex flex-wrap items-center gap-2 mt-4 print:hidden">
           {plan.local_transport && <span className="tag">Getting around: {destinationTransport(plan)} · explore within {plan.activity_radius_miles} miles</span>}
           {plan.ai_generated
@@ -100,6 +85,12 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
         {(plan.sources.flights === 'serpapi' || plan.sources.hotels === 'serpapi') && (
           <p className="text-dim text-xs mt-3">Flight and stay prices are Google Travel search results via SerpApi. They are not booking quotes, and fees and final checkout prices may differ.</p>
         )}
+        {actions && (
+          <div className="lg:hidden flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-line print:hidden">
+            <span className={`serif text-[26px] tabular-nums ${plan.under_budget ? 'text-ink' : 'text-rose'}`}>{usd(plan.total_usd)}</span>
+            <div className="flex flex-wrap gap-2">{actions}</div>
+          </div>
+        )}
       </header>
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
@@ -110,6 +101,31 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
           <Explore plan={plan} />
         </div>
         <aside className="grid gap-4 min-w-0 [&>*]:min-w-0 lg:sticky lg:top-24 print:hidden">
+          <section className="panel p-5 grid gap-4" aria-label="Trip at a glance">
+            <PlacePicture name={plan.dest_place?.label ?? destName} kind={plan.dest_place?.kind} />
+            <dl className="grid gap-2 text-[14px]">
+              {first && last && (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="flex items-center gap-2 text-ink"><Icon name="calendar" size={16} className="text-muted" />{fmtDate(first, { month: 'short', day: 'numeric' })}–{fmtDate(last, { month: 'short', day: 'numeric' })}</dt>
+                  <dd className="text-[13px] text-muted">{plan.nights} night{plan.nights === 1 ? '' : 's'}</dd>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="flex items-center gap-2 text-ink"><Icon name="users" size={16} className="text-muted" />{meta?.travelers ?? plan.travelers ?? 1} traveler{(meta?.travelers ?? plan.travelers ?? 1) > 1 ? 's' : ''}</dt>
+                <dd className="text-[13px] text-muted flex items-center gap-1.5 capitalize"><Icon name={plan.recommended_mode === 'fly' ? 'plane' : 'car'} size={14} />{plan.recommended_mode}
+                  {plan.recommended_mode === 'fly' && plan.origin_airport && plan.dest_airport && <span className="uppercase">{plan.origin_airport.code}–{plan.dest_airport.code}</span>}</dd>
+              </div>
+            </dl>
+            <div className="rounded-lg bg-accent-soft/70 px-4 py-3.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">{unknownCosts ? 'All-in estimate · some places unpriced' : 'All-in estimate'}</div>
+              <div className="flex items-baseline justify-between gap-3 mt-1">
+                <div className={`serif text-[32px] leading-none tabular-nums ${plan.under_budget ? 'text-ink' : 'text-rose'}`}>{usd(plan.total_usd)}</div>
+                <div className="text-[13px] text-muted">{usd(plan.total_usd / Math.max(plan.nights, 1))} / night</div>
+              </div>
+              <div className="text-[13px] text-muted mt-1.5">{budget ? (plan.under_budget ? `${usd(budget - plan.total_usd)} under the ${usd(budget)} budget` : `${usd(plan.total_usd - budget)} over the ${usd(budget)} budget`) : 'No budget set'}{estimates.length > 0 && ' · includes estimates'}</div>
+            </div>
+            {actions && <div className="grid grid-cols-2 gap-2 [&>*]:w-full [&>*:last-child:nth-child(odd)]:col-span-2">{actions}</div>}
+          </section>
           <StayCard hotels={plan.hotels} budgetLeft={budgetLeft} onChoose={onChooseHotel} source={plan.sources.hotels} />
           <CostBreakdown plan={plan} budget={budget} onReplan={onReplan} busy={busy} />
           <AgentsCard plan={plan} />
