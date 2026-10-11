@@ -179,7 +179,26 @@ func (p *Planner) review(ctx context.Context, trip agents.Trip, plan *Plan) []ag
 			tripWeather = append(tripWeather, *w)
 		}
 	}
-	critique := agents.Critique(ctx, p.AI, trip, map[string]any{"summary": plan.Summary, "days": plan.Days, "forecast_for_trip_days": tripWeather})
+	// A compact view (no details or costs) keeps the Reviewer's call short on
+	// a shared, slow endpoint.
+	type line struct {
+		Time, Title, Category string
+	}
+	type dayView struct {
+		Day   int
+		Date  string
+		Theme string
+		Items []line
+	}
+	compact := make([]dayView, 0, len(plan.Days))
+	for _, d := range plan.Days {
+		dv := dayView{Day: d.Day, Date: d.Date, Theme: d.Theme}
+		for _, it := range d.Items {
+			dv.Items = append(dv.Items, line{it.Time, it.Title, it.Category})
+		}
+		compact = append(compact, dv)
+	}
+	critique := agents.Critique(ctx, p.AI, trip, map[string]any{"summary": plan.Summary, "days": compact, "forecast_for_trip_days": tripWeather})
 	return []agents.Report{audit, critique}
 }
 

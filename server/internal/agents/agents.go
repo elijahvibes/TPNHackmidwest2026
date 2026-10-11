@@ -304,7 +304,7 @@ Already guaranteed by the system, so NOT issues: arrival-day items are scheduled
 		Verdict string   `json:"verdict"`
 		Issues  []string `json:"issues"`
 	}
-	cctx, cancel := context.WithTimeout(ctx, callTimeout)
+	cctx, cancel := context.WithTimeout(ctx, callTimeout+30*time.Second) // last step; the endpoint is slowest under load
 	defer cancel()
 	if err := c.ChatJSON(cctx, system, fmt.Sprintf("Trip: %s\nItinerary: %s", tripJSON, itinJSON), &out); err != nil {
 		log.Printf("agents: reviewer: %v", err)
