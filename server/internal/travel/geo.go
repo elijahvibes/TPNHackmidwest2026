@@ -305,7 +305,7 @@ func (g *Geo) Route(ctx context.Context, from, to LatLng) (miles float64, minute
 	// The simplified geometry comes along so Waypoints can place road stops
 	// on the actual highway rather than on a straight line.
 	if !Offline {
-		u := fmt.Sprintf("https://router.project-osrm.org/route/v1/driving/%f,%f;%f,%f?overview=simplified&geometries=geojson", from.Lng, from.Lat, to.Lng, to.Lat)
+		u := fmt.Sprintf("https://router.project-osrm.org/route/v1/driving/%f,%f;%f,%f?overview=full&geometries=geojson", from.Lng, from.Lat, to.Lng, to.Lat)
 		var osrm struct {
 			Code   string `json:"code"`
 			Routes []struct {
@@ -354,6 +354,25 @@ var (
 
 func routeKey(a, b LatLng) string {
 	return fmt.Sprintf("%.3f,%.3f>%.3f,%.3f", a.Lat, a.Lng, b.Lat, b.Lng)
+}
+
+// RouteLine returns the road geometry the last Route call fetched for a to b,
+// thinned to at most max vertices for the plan JSON (nil without one).
+func (g *Geo) RouteLine(a, b LatLng, max int) []LatLng {
+	routeMu.Lock()
+	line := routeLines[routeKey(a, b)]
+	routeMu.Unlock()
+	if len(line) < 2 {
+		return nil
+	}
+	if max < 2 || len(line) <= max {
+		return append([]LatLng(nil), line...)
+	}
+	out := make([]LatLng, 0, max)
+	for i := 0; i < max-1; i++ {
+		out = append(out, line[i*(len(line)-1)/(max-1)])
+	}
+	return append(out, line[len(line)-1])
 }
 
 // Waypoints returns n points spread evenly along the driven road between a

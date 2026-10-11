@@ -90,6 +90,8 @@ export type Plan = {
   stops: Place[]; activities: Place[]; food: Place[]; days: Day[]
   total_usd: number; under_budget: boolean; nights: number
   origin_loc: LatLng; dest_loc: LatLng
+  /** the driven road from origin to destination (OSRM), when routing was live */
+  route_line?: LatLng[]
   origin_place: Placemark; dest_place: Placemark
   origin_airport?: Airport; dest_airport?: Airport
   ai_generated: boolean
