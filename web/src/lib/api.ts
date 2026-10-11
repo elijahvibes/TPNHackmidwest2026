@@ -14,6 +14,8 @@ export type LatLng = { lat: number; lng: number }
 /** A resolved place: what the user typed turned into a point plus a label to show back. */
 export type Placemark = LatLng & {
   label: string; name: string; region: string; country: string; source: string
+  /** coarse geocoder type: city, town, village, park, island, locality */
+  kind?: string
 }
 
 export type Airport = LatLng & { code: string; name: string; city: string; distance_miles: number }

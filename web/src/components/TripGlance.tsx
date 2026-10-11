@@ -1,11 +1,12 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { fmtDate, usd } from '../lib/api'
+import { commonsFileURL, placePhoto, type PlacePhoto } from '../lib/placeImages'
 import Icon from './Icon'
 
-/** Illustrated placeholder: an autumn trail toward the mountains, in the page palette. */
+/** Illustrated fallback: an autumn trail toward the mountains, in the page palette. */
 export function TrailScene({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 400 220" className={`w-full h-auto block ${className}`} role="img" aria-label="A trail winding toward mountains">
+    <svg viewBox="0 0 400 220" className={`w-full h-full block ${className}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label="A trail winding toward mountains">
       <defs>
         <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#dfe7ee" /><stop offset="1" stopColor="#f3efe6" /></linearGradient>
         <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#b9b58a" /><stop offset="1" stopColor="#8d8d5e" /></linearGradient>
@@ -34,11 +35,46 @@ export function TrailScene({ className = '' }: { className?: string }) {
 }
 
 /**
+ * The photo for a destination, chosen by what kind of place it is. The drawn
+ * trail scene sits underneath, so it shows while the photo streams in and
+ * stays if the photo cannot be fetched. The photographer is credited in the
+ * corner.
+ */
+export function PlacePicture({ name, kind, className = 'aspect-[16/10]', credit = true, rounded = 'rounded-lg', lazy = false }: {
+  name: string; kind?: string; className?: string; credit?: boolean; rounded?: string
+  /** defer fetching until near the viewport (for grids of cards; the hero image of a page should load at once) */
+  lazy?: boolean
+}) {
+  const photo: PlacePhoto = placePhoto(name, kind)
+  const [failed, setFailed] = useState(false)
+  const img = useRef<HTMLImageElement>(null)
+  useEffect(() => {
+    const el = img.current
+    // A cached image can finish (or fail) before React attaches onError, so ask the element.
+    setFailed(!!el && el.complete && el.naturalWidth === 0)
+  }, [photo.src])
+  return (
+    <div className={`relative overflow-hidden border border-line bg-panel-2 ${rounded} ${className}`}>
+      <div className="absolute inset-0"><TrailScene /></div>
+      {!failed && (
+        <img ref={img} src={photo.src} alt={photo.alt} loading={lazy ? 'lazy' : 'eager'} decoding="async"
+          onError={() => setFailed(true)} className="absolute inset-0 w-full h-full object-cover" />
+      )}
+      {credit && !failed && (
+        <a href={commonsFileURL(photo)} target="_blank" rel="noreferrer noopener"
+          className="absolute bottom-1.5 right-2 text-[10px] text-white/80 hover:text-white bg-ink/40 rounded px-1.5 py-0.5 backdrop-blur-sm"
+          title={`${photo.author} · ${photo.license} · Wikimedia Commons`}>© {photo.author}</a>
+      )}
+    </div>
+  )
+}
+
+/**
  * The sticky "your trip at a glance" card beside the planner: a live mirror
  * of what the form says, plus the one button that starts the plan.
  */
-export default function TripGlance({ origin, destination, start, end, nights, travelers, budget, style, dateErr, action }: {
-  origin: string; destination: string; start: string; end: string; nights: number; travelers: number
+export default function TripGlance({ origin, destination, destKind, start, end, nights, travelers, budget, style, dateErr, action }: {
+  origin: string; destination: string; destKind?: string; start: string; end: string; nights: number; travelers: number
   budget?: number; style: string[]; dateErr?: string; action: ReactNode
 }) {
   const dest = (destination || 'Your').split(',')[0].trim()
@@ -51,7 +87,7 @@ export default function TripGlance({ origin, destination, start, end, nights, tr
   return (
     <aside className="panel p-6 grid gap-5 lg:sticky lg:top-24">
       <h2 className="text-[22px] text-ink">Your trip at a glance</h2>
-      <div className="rounded-lg overflow-hidden border border-line"><TrailScene /></div>
+      <PlacePicture name={destination} kind={destKind} />
       <div>
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-[30px] leading-tight text-ink truncate">{title}</h3>

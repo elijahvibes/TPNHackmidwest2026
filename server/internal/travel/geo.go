@@ -209,6 +209,7 @@ func photonPlacemark(f photonFeature) (Placemark, bool) {
 		Country: strings.ToUpper(f.Properties.CountryCode),
 		LatLng:  LatLng{Lat: f.Geometry.Coordinates[1], Lng: f.Geometry.Coordinates[0]},
 		Source:  "photon",
+		Kind:    placeKind(f.Properties.OSMKey, f.Properties.OSMValue),
 	}
 	if p.Country == "US" {
 		p.Region = StateCode(f.Properties.State)
@@ -438,4 +439,23 @@ func Interpolate(a, b LatLng, n int) []LatLng {
 		pts = append(pts, LatLng{Lat: a.Lat + (b.Lat-a.Lat)*t, Lng: a.Lng + (b.Lng-a.Lng)*t})
 	}
 	return pts
+}
+
+// placeKind collapses OSM tags into the handful of place types the UI knows.
+func placeKind(key, value string) string {
+	switch key + ":" + value {
+	case "place:city":
+		return "city"
+	case "place:town":
+		return "town"
+	case "place:village", "place:hamlet":
+		return "village"
+	case "place:island":
+		return "island"
+	case "boundary:national_park", "leisure:nature_reserve", "boundary:protected_area":
+		return "park"
+	case "place:locality":
+		return "locality"
+	}
+	return ""
 }
