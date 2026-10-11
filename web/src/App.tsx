@@ -13,7 +13,7 @@ import Profile from './pages/Profile'
 
 function Private({ children }: { children: React.ReactElement }) {
   const { user, loading } = useAuth()
-  if (loading) return <div className="mono text-muted p-8">loading session…</div>
+  if (loading) return <div className="text-muted p-8">Loading your session…</div>
   return user ? children : <Navigate to="/login" replace />
 }
 

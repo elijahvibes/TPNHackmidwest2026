@@ -2,15 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmtDate, fmtTime, usd, type Day, type DayItem, type ItemCategory, type Plan } from '../lib/api'
 import { itineraryMapLink } from '../lib/placeLinks'
 import { roadStops, showTransportItem } from '../lib/transport'
+import Icon, { WeatherIcon, type IconName } from './Icon'
 
-const ICON: Record<string, string> = { sun: '☀', cloud: '☁', rain: '🌧', snow: '❄', storm: '⛈', wind: '💨', fog: '🌫' }
-
-const CAT: Record<ItemCategory, { label: string; color: string; glyph: string }> = {
-  transport: { label: 'travel', color: 'var(--color-cyan)', glyph: '→' },
-  lodging: { label: 'stay', color: 'var(--color-rose)', glyph: '⌂' },
-  activity: { label: 'do', color: 'var(--color-accent)', glyph: '★' },
-  food: { label: 'eat', color: 'var(--color-amber)', glyph: '◆' },
-  stop: { label: 'stop', color: 'var(--color-muted)', glyph: '⚑' },
+const CAT: Record<ItemCategory, { label: string; color: string; icon: IconName }> = {
+  transport: { label: 'Travel', color: 'var(--color-cyan)', icon: 'arrow' },
+  lodging: { label: 'Stay', color: 'var(--color-rose)', icon: 'bed' },
+  activity: { label: 'Do', color: 'var(--color-accent)', icon: 'star' },
+  food: { label: 'Eat', color: 'var(--color-amber)', icon: 'fork' },
+  stop: { label: 'Stop', color: 'var(--color-muted)', icon: 'flag' },
 }
 
 const dayTotal = (d: Day) => d.items.reduce((s, it) => s + (it.cost_usd || 0), 0)
@@ -47,22 +46,22 @@ export default function Itinerary({ plan }: { plan: Plan }) {
 
   return (
     <section className="grid gap-4" aria-label="itinerary">
-      <div className="sticky top-14 z-[5] -mx-1 px-1 py-2 bg-bg/90 backdrop-blur print:static print:bg-transparent">
+      <div className="sticky top-16 z-[5] -mx-1 px-1 py-2 bg-bg/95 backdrop-blur print:static print:bg-transparent">
         <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
-          <span className="mono text-xs text-muted prompt shrink-0">itinerary</span>
+          <h3 className="text-[19px] shrink-0 mr-2">Itinerary</h3>
           {days.map(d => {
             const w = weatherByDate[d.date]
             const on = d.day === active
             return (
               <button key={d.day} onClick={() => jump(d.day)}
-                className={`shrink-0 mono text-[11px] px-2.5 py-1 rounded-full border transition-colors ${on ? 'border-accent text-accent bg-accent/10' : 'border-line text-muted hover:text-ink hover:border-muted'}`}
+                className={`chip shrink-0 !py-1 !text-[12px] ${on ? 'chip-on' : ''}`}
                 aria-current={on ? 'true' : undefined}>
-                <span className="font-bold">d{d.day}</span> · {fmtDate(d.date, { weekday: 'short' })} {fmtDate(d.date, { day: 'numeric' })}
-                {w && <span className="ml-1.5 text-dim">{ICON[w.icon] ?? '☀'} {w.high_f}°</span>}
+                <span className="font-medium">Day {d.day}</span> · {fmtDate(d.date, { weekday: 'short' })} {fmtDate(d.date, { day: 'numeric' })}
+                {w && <span className="ml-1 text-dim flex items-center gap-0.5"><WeatherIcon icon={w.icon} size={12} />{w.high_f}°</span>}
               </button>
             )
           })}
-          <button onClick={() => window.print()} className="ml-auto shrink-0 mono text-[11px] text-dim hover:text-ink print:hidden" title="print or save as PDF">⎙ print</button>
+          <button onClick={() => window.print()} className="ml-auto shrink-0 text-[12px] text-muted hover:text-ink print:hidden flex items-center gap-1" title="Print or save as PDF"><Icon name="print" size={14} />Print</button>
         </div>
       </div>
 
@@ -71,30 +70,30 @@ export default function Itinerary({ plan }: { plan: Plan }) {
         const sub = dayTotal(d)
         return (
           <article key={d.day} ref={el => { refs.current[d.day] = el }} data-day={d.day} id={`day-${d.day}`}
-            className="panel overflow-hidden scroll-mt-28 print:break-inside-avoid">
-            <header className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 pt-4 pb-3 border-b border-line bg-panel-2/40">
-              <div className="mono text-accent font-bold text-2xl leading-none tabular-nums w-10">{String(d.day).padStart(2, '0')}</div>
+            className="panel overflow-hidden scroll-mt-32 print:break-inside-avoid">
+            <header className="flex flex-wrap items-center gap-x-4 gap-y-1 px-6 pt-5 pb-4 border-b border-line bg-panel-2/60">
+              <div className="serif text-ink text-[28px] leading-none tabular-nums w-10">{String(d.day).padStart(2, '0')}</div>
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-ink">{d.theme}</div>
-                <div className="mono text-[11px] text-muted">{fmtDate(d.date, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+                <div className="text-[17px] text-ink serif">{d.theme}</div>
+                <div className="text-[12px] text-muted">{fmtDate(d.date, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
               </div>
               {w && (
-                <div className={`mono text-[11px] px-2 py-1 rounded border ${w.precip_pct >= 50 ? 'border-cyan/50 text-cyan' : 'border-line text-muted'}`} title={w.short}>
-                  {ICON[w.icon] ?? '☀'} {w.high_f}° / {w.low_f}°{w.precip_pct > 0 ? ` · ${w.precip_pct}% rain` : ''}
+                <div className={`text-[12px] px-2 py-1 rounded-md border flex items-center gap-1.5 ${w.precip_pct >= 50 ? 'border-cyan/40 text-cyan' : 'border-line text-muted'}`} title={w.short}>
+                  <WeatherIcon icon={w.icon} size={14} />{w.high_f}° / {w.low_f}°{w.precip_pct > 0 ? ` · ${w.precip_pct}% rain` : ''}
                 </div>
               )}
-              <div className="mono text-sm text-ink tabular-nums">{sub ? usd(sub) : <span className="text-dim">{unknownPlaceCosts || d.items.some(it => it.cost_unknown) ? 'unquoted costs' : 'free day'}</span>}</div>
+              <div className="text-sm text-ink tabular-nums">{sub ? usd(sub) : <span className="text-dim">{unknownPlaceCosts || d.items.some(it => it.cost_unknown) ? 'Unquoted costs' : 'Free day'}</span>}</div>
             </header>
-            <ol className="px-5 py-2">
+            <ol className="px-6 py-2">
               {d.items.map((it, i) => <Item key={i} it={it} last={i === d.items.length - 1} mapLink={itineraryMapLink(plan, it)} unknownPlaceCosts={unknownPlaceCosts} />)}
             </ol>
           </article>
         )
       })}
 
-      <div className="flex items-center justify-between mono text-xs text-muted px-1">
+      <div className="flex items-center justify-between text-[13px] text-muted px-1">
         <span>{plan.days.length} days · {plan.nights} nights</span>
-        <span>scheduled costs <b className="text-ink">{usd(total)}</b> · plan total <b className="text-accent">{usd(plan.total_usd)}</b></span>
+        <span>Scheduled costs <b className="text-ink font-medium tabular-nums">{usd(total)}</b> · plan total <b className="text-ink font-medium tabular-nums">{usd(plan.total_usd)}</b></span>
       </div>
     </section>
   )
@@ -103,21 +102,23 @@ export default function Itinerary({ plan }: { plan: Plan }) {
 function Item({ it, last, mapLink, unknownPlaceCosts }: { it: DayItem; last: boolean; mapLink: string | undefined; unknownPlaceCosts: boolean }) {
   const c = CAT[it.category] ?? CAT.activity
   return (
-    <li className="grid grid-cols-[60px_20px_1fr_auto] gap-x-3 relative">
-      <span className="mono text-[11px] text-dim pt-3 tabular-nums whitespace-nowrap">{it.time === '--:--' ? '' : fmtTime(it.time)}</span>
+    <li className="grid grid-cols-[64px_22px_1fr_auto] gap-x-3 relative">
+      <span className="text-[12px] text-muted pt-3.5 tabular-nums whitespace-nowrap">{it.time === '--:--' ? '' : fmtTime(it.time)}</span>
       <span className="relative flex justify-center pt-3">
-        {!last && <span className="absolute top-7 bottom-0 w-px bg-line" aria-hidden />}
-        <span className="relative z-[1] w-5 h-5 rounded-full border bg-bg flex items-center justify-center text-[10px] leading-none"
-          style={{ borderColor: c.color, color: c.color }} aria-label={c.label}>{c.glyph}</span>
+        {!last && <span className="absolute top-8 bottom-0 w-px bg-line" aria-hidden />}
+        <span className="relative z-[1] w-[22px] h-[22px] rounded-full border bg-panel flex items-center justify-center"
+          style={{ borderColor: c.color, color: c.color }} aria-label={c.label}><Icon name={c.icon} size={11} /></span>
       </span>
-      <div className={`py-2.5 ${last ? '' : 'border-b border-line/60'}`}>
-        <div className="text-sm text-ink">{it.title}</div>
+      <div className={`py-3 ${last ? '' : 'border-b border-line/60'}`}>
+        <div className="text-[15px] text-ink">{it.title}</div>
         {it.detail && <div className="text-[13px] text-muted mt-0.5">{it.detail}</div>}
-        {mapLink && <a href={mapLink} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan underline"
-          aria-label={`View map for ${it.title} (opens in a new tab)`}>{it.category === 'lodging' ? 'Search map' : 'View map'}</a>}
-        <div className="mono text-[10px] uppercase tracking-wider mt-1" style={{ color: c.color }}>{c.label}</div>
+        <div className="flex items-center gap-3 mt-1">
+          <span className="text-[11px] uppercase tracking-wider" style={{ color: c.color }}>{c.label}</span>
+          {mapLink && <a href={mapLink} target="_blank" rel="noopener noreferrer" className="text-[12px] text-cyan underline underline-offset-2"
+            aria-label={`View map for ${it.title} (opens in a new tab)`}>{it.category === 'lodging' ? 'Search map' : 'View map'}</a>}
+        </div>
       </div>
-      <span className={`mono text-sm pt-2.5 tabular-nums ${it.cost_usd ? 'text-ink' : 'text-dim'}`}>{it.cost_unknown ? 'price unknown' : it.cost_usd ? usd(it.cost_usd) : unknownPlaceCosts && ['activity', 'food', 'stop'].includes(it.category) ? 'price unknown' : 'free'}</span>
+      <span className={`text-sm pt-3 tabular-nums ${it.cost_usd ? 'text-ink' : 'text-dim'}`}>{it.cost_unknown ? 'price unknown' : it.cost_usd ? usd(it.cost_usd) : unknownPlaceCosts && ['activity', 'food', 'stop'].includes(it.category) ? 'price unknown' : 'free'}</span>
     </li>
   )
 }

@@ -40,7 +40,7 @@ function Sketch({ pins, W, H, minSpan, paths, legend, label }: {
   }
   return (
     <>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto font-mono" role="img" aria-label={label}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={label}>
         <rect width={W} height={H} fill="url(#tpn-grid)" />
         {paths({ ...pr, arc })}
         {pins.map((p, i) => {
@@ -55,10 +55,10 @@ function Sketch({ pins, W, H, minSpan, paths, legend, label }: {
               <title>{p.sub ? `${p.label} · ${p.sub}` : p.label}</title>
               {big && <circle cx={x} cy={y} r="11" fill={COLOR[p.kind]} opacity="0.18" />}
               {p.kind === 'airport'
-                ? <rect x={x - 4} y={y - 4} width="8" height="8" fill="var(--color-bg)" stroke={COLOR.airport} strokeWidth="1.5" transform={`rotate(45 ${x} ${y})`} />
+                ? <rect x={x - 4} y={y - 4} width="8" height="8" fill="var(--color-panel)" stroke={COLOR.airport} strokeWidth="1.5" transform={`rotate(45 ${x} ${y})`} />
                 : p.kind === 'hotel'
-                  ? <path d={`M ${x - 5} ${y + 4} v -6 l 5 -5 l 5 5 v 6 z`} fill={COLOR.hotel} stroke="var(--color-bg)" strokeWidth="1.2" />
-                  : <circle cx={x} cy={y} r={big ? 5 : 3.5} fill={COLOR[p.kind]} stroke="var(--color-bg)" strokeWidth="1.5" />}
+                  ? <path d={`M ${x - 5} ${y + 4} v -6 l 5 -5 l 5 5 v 6 z`} fill={COLOR.hotel} stroke="var(--color-panel)" strokeWidth="1.2" />
+                  : <circle cx={x} cy={y} r={big ? 5 : 3.5} fill={COLOR[p.kind]} stroke="var(--color-panel)" strokeWidth="1.5" />}
               {!p.quiet && (
                 <text x={x + dx} y={y + dy} fontSize={big ? 12 : 10} fontWeight={big || p.kind === 'hotel' ? 600 : 400}
                   fill={big ? 'var(--color-ink)' : p.kind === 'hotel' ? COLOR.hotel : 'var(--color-muted)'} textAnchor={anchor}>{text}</text>
@@ -67,7 +67,7 @@ function Sketch({ pins, W, H, minSpan, paths, legend, label }: {
           )
         })}
       </svg>
-      <div className="mono text-[10px] text-dim mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+      <div className="text-[11px] text-dim mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
         {legend.map(([k, t]) => <span key={k}><span style={{ color: COLOR[k] }}>{k === 'hotel' ? '⌂' : k === 'airport' ? '◆' : '●'}</span> {t}</span>)}
       </div>
     </>
@@ -109,7 +109,7 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
     : `${miles} mi each way · ${Math.floor(plan.drive.duration_min / 60)}h ${plan.drive.duration_min % 60}m`
 
   return (
-    <div className="panel p-3 overflow-hidden grid gap-3">
+    <div className="panel p-5 overflow-hidden grid gap-4">
       <svg width="0" height="0" className="absolute" aria-hidden>
         <defs>
           <pattern id="tpn-grid" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -119,8 +119,8 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
       </svg>
       <div>
         <div className="flex items-baseline justify-between">
-          <div className="label">route</div>
-          <div className="mono text-[11px] text-muted">{caption}</div>
+          <h3 className="text-[19px]">Route</h3>
+          <div className="text-[12px] text-muted shrink-0">{caption}</div>
         </div>
         <div className="mt-2">
           <Sketch pins={routePins} W={720} H={260} minSpan={0.5} label={`Route from ${oName} to ${dName}`}
@@ -137,10 +137,10 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
         </div>
       </div>
       {localPins.length > 1 && (
-        <div className="border-t border-line pt-3">
+        <div className="border-t border-line pt-4">
           <div className="flex items-baseline justify-between">
-            <div className="label">around {dName}</div>
-            {hotel?.distance_km > 0 && <div className="mono text-[11px] text-muted">stay {hotel.distance_km.toFixed(1)} km from center</div>}
+            <h3 className="text-[19px] truncate">Around {dName}</h3>
+            {hotel?.distance_km > 0 && <div className="text-[12px] text-muted shrink-0">stay {hotel.distance_km.toFixed(1)} km from center</div>}
           </div>
           <div className="mt-2">
             <Sketch pins={localPins} W={720} H={320} minSpan={0.045} label={`Around ${dName}: your stay and things to do`}
