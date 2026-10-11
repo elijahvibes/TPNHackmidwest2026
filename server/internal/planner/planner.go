@@ -83,6 +83,7 @@ type Plan struct {
 	Nights              int                  `json:"nights"`
 	OriginLoc           travel.LatLng        `json:"origin_loc"`
 	DestLoc             travel.LatLng        `json:"dest_loc"`
+	RouteLine           []travel.LatLng      `json:"route_line,omitempty"` // driven road from origin to destination (OSRM), for the map
 	OriginPlace         travel.Placemark     `json:"origin_place"`             // what the origin resolved to ("Lawrence, KS")
 	DestPlace           travel.Placemark     `json:"dest_place"`               // what the destination resolved to
 	OriginAirport       *travel.Airport      `json:"origin_airport,omitempty"` // nearest airport used for fares

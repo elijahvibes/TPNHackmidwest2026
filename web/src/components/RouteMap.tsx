@@ -121,6 +121,9 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
     { pts: arc(origin, plan.origin_airport!), color: COLOR.stop, width: 1.5, dash: '2 4' },
     { pts: arc(plan.origin_airport!, plan.dest_airport!, 0.18), color: COLOR.origin, dash: '8 6' },
     { pts: arc(plan.dest_airport!, dest), color: COLOR.stop, width: 1.5, dash: '2 4' },
+  ] : (plan.route_line?.length ?? 0) > 1 ? [
+    // the real road from OSRM; a solid line, since it is where you drive, not a sketch
+    { pts: plan.route_line!, color: COLOR.dest, width: 3, opacity: 0.9 },
   ] : [
     { pts: arc(origin, dest, 0.12), color: COLOR.dest, dash: '6 6', opacity: 0.85 },
   ]

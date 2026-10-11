@@ -378,6 +378,7 @@ func (p *Planner) assemble(g gathered, activities, food, stops []travel.Place) *
 		Nights:          nights,
 		OriginLoc:       g.originPlace.LatLng,
 		DestLoc:         g.destPlace.LatLng,
+		RouteLine:       p.Geo.RouteLine(g.originPlace.LatLng, g.destPlace.LatLng, 400),
 		OriginPlace:     g.originPlace,
 		DestPlace:       g.destPlace,
 		OriginAirport:   g.originAirport,
