@@ -9,7 +9,7 @@ import Hero from '../components/Hero'
 import { useAuth } from '../lib/auth'
 
 export default function Landing() {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
   const [plan, setPlan] = useState<Plan | null>(null)
   const [req, setReq] = useState<PlanRequest | null>(null)
   const [jobId, setJobId] = useState<string | null>(null)
@@ -43,12 +43,15 @@ export default function Landing() {
     finally { setSelecting(false) }
   }
 
+  if (loading) return <div className="text-muted p-8">Loading your session…</div>
+  if (!user) return <Welcome />
+
   return (
     <div className="grid gap-8">
       <Hero eyebrow="A good trip starts here" title="A plan that fits."
         lede="The whole getaway, thoughtfully planned around your budget. Flights, gas for your car, stays and things to do, priced together and ranked by value." />
 
-      <TripForm onSubmit={run} busy={busy} submitLabel={user ? 'Preview my trip' : 'Plan my trip'} defaultOrigin={user?.home_city} />
+      <TripForm onSubmit={run} busy={busy} submitLabel="Preview my trip" defaultOrigin={user.home_city} />
       <PlanProgress active={busy} events={job.events} stage={job.job?.stage} compact={!!plan} />
       {err && <div className="text-sm text-rose">{err}</div>}
       {plan && (
@@ -56,10 +59,29 @@ export default function Landing() {
           <PlanView plan={plan} meta={{ travelers: req?.travelers, budget_usd: req?.budget_usd ?? null }} refining={job.running}
             onSelectFlight={job.running ? undefined : selectFlight} disabled={busy || selecting}
             onChooseHotel={job.running ? undefined : name => setPlan(p => p ? chooseHotelLocally(p, name) : p)} />
-          {!user && <div className="panel p-5 text-sm text-muted">Like it? <Link to="/register" className="text-accent underline underline-offset-2">Create an account</Link> to save trips and swap stays for good.</div>}
-          {user && <div className="panel p-5 text-sm text-muted">Save this as a trip from <Link to="/app/new" className="text-accent underline underline-offset-2">Plan a trip</Link>.</div>}
+          <div className="panel p-5 text-sm text-muted">Save this as a trip from <Link to="/app/new" className="text-accent underline underline-offset-2">Plan a trip</Link>.</div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** Signed-out front door: planning needs an account, so the only way in is to sign in or sign up. */
+function Welcome() {
+  return (
+    <div className="grid gap-8">
+      <Hero eyebrow="A good trip starts here" title="A plan that fits."
+        lede="The whole getaway, thoughtfully planned around your budget. Flights, gas for your car, stays and things to do, priced together and ranked by value." />
+      <div className="panel p-8 sm:p-10 grid gap-5 max-w-xl">
+        <div>
+          <h2 className="text-[26px]">Sign in to start planning</h2>
+          <p className="text-[15px] text-muted mt-2">Trips, stays and flight picks are saved to your account, so every plan is yours to come back to.</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/register" className="btn-primary">Create an account</Link>
+          <Link to="/login" className="btn-ghost">Log in</Link>
+        </div>
+      </div>
     </div>
   )
 }
