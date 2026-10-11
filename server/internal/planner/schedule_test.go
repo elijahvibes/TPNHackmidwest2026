@@ -64,6 +64,20 @@ func TestNormalizeDinnerHoursAndSpacing(t *testing.T) {
 	}
 }
 
+func TestNormalizeLongDriveHomeLeavesByNoon(t *testing.T) {
+	plan := drivePlan(621) // 10h21m home
+	days := []Day{{Day: 1}, {Day: 2, Items: []DayItem{
+		{Time: "10:00", Title: "Colorado State Capitol", Category: "activity"},
+		{Time: "17:30", Title: "Drive back to Kansas City", Category: "transport"},
+	}}}
+	notes := normalizeSchedule(plan, days)
+	// 17:30 would arrive at 04:00; the leg is pulled to noon and the 10:00 visit
+	// (2 h + 45 min lead = 12:45) no longer fits, so it is dropped.
+	if got := times(days[1]); got != "12:00 Drive back to Kansas City" {
+		t.Errorf("day 2: %s (%v)", got, notes)
+	}
+}
+
 func TestNormalizeLastDayBeforeFlightHome(t *testing.T) {
 	plan := &Plan{RecommendedMode: "fly", Nights: 1, Flights: []travel.FlightQuote{{DurationMin: 120}}}
 	days := []Day{{Day: 1}, {Day: 2, Items: []DayItem{

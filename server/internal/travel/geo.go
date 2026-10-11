@@ -351,7 +351,9 @@ var (
 	routeLines = map[string][]LatLng{} // road geometry from the last Route call for a pair
 )
 
-func routeKey(a, b LatLng) string { return fmt.Sprintf("%.3f,%.3f>%.3f,%.3f", a.Lat, a.Lng, b.Lat, b.Lng) }
+func routeKey(a, b LatLng) string {
+	return fmt.Sprintf("%.3f,%.3f>%.3f,%.3f", a.Lat, a.Lng, b.Lat, b.Lng)
+}
 
 // Waypoints returns n points spread evenly along the driven road between a
 // and b (exclusive of the ends), for looking up stops on the way. It uses the

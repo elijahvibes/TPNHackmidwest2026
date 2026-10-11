@@ -702,11 +702,24 @@ func (p *Planner) writeDay(ctx context.Context, plan *Plan, i int, date string, 
 		}
 	}
 	w := weatherOn(plan.Weather, date)
+	// Plain words beat the raw record: NWS can say "Sunny" with a 57% chance
+	// of rain (showers later), and the model should not call that a sunny day.
+	weatherText := "no forecast for this date yet; do not describe the weather"
+	if w != nil {
+		switch {
+		case w.PrecipPct >= rainyPct:
+			weatherText = fmt.Sprintf("likely rain (%d%% chance), high %d°F: call it a rainy day, plan indoors, suggest a jacket", w.PrecipPct, w.HighF)
+		case w.PrecipPct >= 30:
+			weatherText = fmt.Sprintf("%s with a %d%% chance of showers, high %d°F", w.Short, w.PrecipPct, w.HighF)
+		default:
+			weatherText = fmt.Sprintf("%s, high %d°F, low %d°F", w.Short, w.HighF, w.LowF)
+		}
+	}
 	data := map[string]any{
 		"day": i + 1, "of": n, "date": date, "theme": a.Theme, "destination": plan.DestPlace.Label,
 		"timing_rules": dayTimingRules(plan, i, n, len(a.Stops)),
 		"travelers":    plan.Travelers, "local_transport": effectiveTransport(plan),
-		"weather": w, "safety_level": plan.Safety.Level, "safety_tip": firstOf(plan.Safety.Tips),
+		"weather": weatherText, "safety_level": plan.Safety.Level, "safety_tip": firstOf(plan.Safety.Tips),
 		"fixed_items": travelFacts, "activities": facts(a.Activities), "dinner": facts(a.Food), "stops": facts(a.Stops),
 	}
 	raw, _ := json.Marshal(data)

@@ -184,6 +184,13 @@ func normalizeSchedule(plan *Plan, days []Day) []string {
 					}
 				}
 			}
+			if plan.RecommendedMode != "fly" && plan.Drive.DurationMin > 6*60 {
+				latest = 12 * 60 // a long drive home leaves by noon, not after dinner
+			}
+			if homeIdx >= 0 && homeAt > latest {
+				notes = append(notes, fmt.Sprintf("day %d: trip home moved %s → %s (leave early enough to arrive at a sane hour)", d.Day, fmtHM(homeAt), fmtHM(latest)))
+				homeAt = latest
+			}
 			if homeIdx >= 0 {
 				kept := d.Items[:0]
 				for i, it := range d.Items {
