@@ -161,17 +161,19 @@ func dailyActivities(activities []travel.Place, center travel.LatLng, weather tr
 	return days
 }
 
-func plannedPlaceCost(activities, food []travel.Place, center travel.LatLng, weather travel.Weather, start time.Time, nights, travelers int) float64 {
+// plannedPlaceCost is what the rule-based itinerary will charge for places
+// and meals; arrival (minutes after midnight on day 1) decides whether day 1
+// gets lunch, exactly as fallbackItinerary decides it.
+func plannedPlaceCost(activities, food []travel.Place, center travel.LatLng, weather travel.Weather, start time.Time, nights, travelers int, arrival int) float64 {
 	cost := 0.0
 	days := dailyActivities(activities, center, weather, start, nights)
-	meals := dailyMeals(food, center, days, nights)
-	for day, places := range days {
+	for _, places := range days {
 		for _, p := range places {
 			cost += p.PriceUSD * float64(travelers)
 		}
-		if meal := meals[day]; meal != nil {
-			cost += meal.PriceUSD * float64(travelers)
-		}
+	}
+	for _, m := range planMeals(&Plan{Food: food}, nights+1, arrival, 12*60) {
+		cost += mealCost(m, travelers)
 	}
 	return round2(cost)
 }

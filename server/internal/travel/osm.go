@@ -27,7 +27,8 @@ var overpassEndpoints = []string{
 
 // osmSelectors maps a place kind to Overpass tag filters.
 var osmSelectors = map[string][]string{
-	"food":       {`["amenity"~"^(restaurant|cafe)$"]`},
+	"food":       {`["amenity"="restaurant"]`},
+	"breakfast":  {`["amenity"="cafe"]`, `["shop"="bakery"]`},
 	"attraction": {`["tourism"~"^(attraction|museum|zoo|aquarium|gallery|theme_park|viewpoint)$"]`, `["leisure"="park"]`},
 	"rest_stop":  {`["amenity"="fuel"]`, `["highway"~"^(rest_area|services)$"]`},
 	"outdoors":   {`["leisure"~"^(park|nature_reserve)$"]`, `["boundary"="national_park"]`},
@@ -39,7 +40,7 @@ var osmSelectors = map[string][]string{
 
 // osmPriceUSD gives a rough per-person cost. OpenStreetMap carries no prices,
 // so these are estimates and the plan flags them as such.
-var osmPriceUSD = map[string]float64{"restaurant": 22, "cafe": 10, "bar": 15, "pub": 15, "nightclub": 20}
+var osmPriceUSD = map[string]float64{"restaurant": 22, "cafe": 10, "bakery": 8, "bar": 15, "pub": 15, "nightclub": 20}
 
 type osmElement struct {
 	Lat    float64                     `json:"lat"`

@@ -275,6 +275,14 @@ func Audit(items []Item, known Known) (drop map[int]string, clamp map[int]float6
 			drop[i] = fmt.Sprintf("day %d: %q is not in the real place data", it.Day, it.Title)
 			continue
 		}
+		if it.Category == "stop" {
+			// A road stop's cost is the planned refuel for the whole car, not a
+			// per-person admission; the planner set it from the tank math.
+			if math.Abs(it.CostUSD-p.PriceUSD) > 1 {
+				clamp[i] = p.PriceUSD
+			}
+			continue
+		}
 		// A place with an estimated price must not be billed above it for the group.
 		if p.PriceUSD > 0 && it.CostUSD > p.PriceUSD*trav*1.25+1 {
 			clamp[i] = round2(p.PriceUSD * trav)

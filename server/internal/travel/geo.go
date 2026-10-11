@@ -369,10 +369,38 @@ func (g *Geo) Waypoints(a, b LatLng, n int) []LatLng {
 	return Interpolate(a, b, n)
 }
 
+// WaypointsAt returns the road point at each fraction (0..1) of the drive
+// from a to b, falling back to straight-line interpolation.
+func (g *Geo) WaypointsAt(a, b LatLng, fracs []float64) []LatLng {
+	routeMu.Lock()
+	line := routeLines[routeKey(a, b)]
+	routeMu.Unlock()
+	if pts := PointsAtFractions(line, fracs); len(pts) == len(fracs) {
+		return pts
+	}
+	out := make([]LatLng, 0, len(fracs))
+	for _, t := range fracs {
+		out = append(out, LatLng{Lat: a.Lat + (b.Lat-a.Lat)*t, Lng: a.Lng + (b.Lng-a.Lng)*t})
+	}
+	return out
+}
+
 // PointsAlong picks n points at equal distance fractions along a polyline
 // (exclusive of its ends). Fewer than two vertices → nil.
 func PointsAlong(line []LatLng, n int) []LatLng {
-	if len(line) < 2 || n < 1 {
+	if n < 1 {
+		return nil
+	}
+	fracs := make([]float64, 0, n)
+	for k := 1; k <= n; k++ {
+		fracs = append(fracs, float64(k)/float64(n+1))
+	}
+	return PointsAtFractions(line, fracs)
+}
+
+// PointsAtFractions returns the point at each distance fraction of a polyline.
+func PointsAtFractions(line []LatLng, fracs []float64) []LatLng {
+	if len(line) < 2 || len(fracs) == 0 {
 		return nil
 	}
 	cum := make([]float64, len(line))
@@ -383,10 +411,10 @@ func PointsAlong(line []LatLng, n int) []LatLng {
 	if total == 0 {
 		return nil
 	}
-	out := make([]LatLng, 0, n)
+	out := make([]LatLng, 0, len(fracs))
 	seg := 1
-	for k := 1; k <= n; k++ {
-		target := total * float64(k) / float64(n+1)
+	for _, fr := range fracs {
+		target := total * math.Max(0, math.Min(1, fr))
 		for seg < len(cum)-1 && cum[seg] < target {
 			seg++
 		}

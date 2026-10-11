@@ -19,7 +19,7 @@ var priceRules = []struct {
 	{[]string{"historic", "historical_landmark", "monument", "memorial", "tourism.sights"}, 0},
 	{[]string{"leisure.park", "park", "national_park", "natural", "nature_reserve", "viewpoint", "hiking_area", "campground"}, 0},
 	{[]string{"catering.fast_food", "fast_food"}, 12},
-	{[]string{"catering.cafe", "cafe", "coffee"}, 12},
+	{[]string{"catering.cafe", "cafe", "coffee", "bakery", "food_and_drink.bakery"}, 12},
 	{[]string{"catering.bar", "catering.pub", "bar", "pub", "night_club", "nightclub"}, 18},
 	{[]string{"catering.restaurant", "restaurant"}, 28},
 	{[]string{"service.vehicle.fuel", "gas_station", "fuel", "rest_area", "rest_stop", "services"}, 0},
@@ -27,7 +27,7 @@ var priceRules = []struct {
 
 // kindDefaults cover a place whose categories say nothing useful.
 var kindDefaults = map[string]float64{
-	"attraction": 15, "museums": 18, "family": 25, "history": 0, "outdoors": 0, "nightlife": 18, "food": 28, "rest_stop": 0,
+	"attraction": 15, "museums": 18, "family": 25, "history": 0, "outdoors": 0, "nightlife": 18, "food": 28, "breakfast": 12, "rest_stop": 0,
 }
 
 // EstimatePrice returns a typical per-person price for a place with no known

@@ -28,6 +28,7 @@ type Request struct {
 	BudgetUSD           float64        `json:"budget_usd"`
 	Mode                string         `json:"mode"` // auto | drive | fly
 	VehicleMPG          float64        `json:"vehicle_mpg"`
+	TankGallons         float64        `json:"tank_gallons"` // 0 = typical 14 gal
 	Interests           []string       `json:"interests"`
 	OriginLoc           *travel.LatLng `json:"origin_loc,omitempty"` // from browser geolocation or the autocomplete pick
 	DestLoc             *travel.LatLng `json:"dest_loc,omitempty"`   // from the autocomplete pick
@@ -441,7 +442,9 @@ type outline struct {
 	Days    []struct {
 		Theme      string `json:"theme"`
 		Activities []int  `json:"activities"`
-		Food       []int  `json:"food"`
+		Breakfast  *int   `json:"breakfast"`
+		Lunch      *int   `json:"lunch"`
+		Dinner     *int   `json:"dinner"`
 		Stops      []int  `json:"stops"`
 	} `json:"days"`
 }
@@ -450,7 +453,7 @@ type outline struct {
 type dayAssignment struct {
 	Theme      string
 	Activities []travel.Place
-	Food       []travel.Place
+	Meals      dayMeals
 	Stops      []travel.Place
 }
 
@@ -599,15 +602,15 @@ func (p *Planner) outlineDays(ctx context.Context, req Request, plan *Plan, star
 		"transport_usd": rec.TransportUSD, "lodging_usd": rec.LodgingUSD, "activities_usd": rec.ActivitiesUSD,
 		"hotel": first(plan.Hotels), "weather": weather, "safety_level": plan.Safety.Level,
 		"local_transport": effectiveTransport(plan), "activity_radius_miles": plan.ActivityRadiusMiles,
-		"activities": index(plan.Activities, true), "food": index(plan.Food, false), "stops": index(plan.Stops, false),
+		"activities": index(plan.Activities, true), "food": indexFood(plan), "stops": index(plan.Stops, false),
 	}
 	if plan.Research != nil {
 		data["research"] = map[string]any{"overview": plan.Research.Overview, "tips": plan.Research.Tips, "avoid": plan.Research.Avoid, "seasonal": plan.Research.Seasonal}
 	}
 	raw, _ := json.Marshal(data)
 	system := fmt.Sprintf(`You are the Writer agent of TPN, a sharp, budget-savvy travel planner, doing the outline pass. Reply with JSON only:
-{"summary": string, "days": [{"theme": string, "activities": [int], "food": [int], "stops": [int]}]}
-"days" has exactly %d entries, in order. Day 1 is the travel-out day and the last day is the travel-home day: give each at most one activity (within 3 miles of center on the last day) and no activity on day 1 when the trip is long. Middle days get TWO activities (one for the morning, one for the afternoon) whenever two unused places of DIFFERENT types exist, preferring ones near each other; vary types across days too (not a small park every day; pick the most distinctive places first); prefer indoor types on days with 50%%+ rain and say so in the theme. Each activity index at most once in the whole trip. One food index per day for dinner, each at most once; skip dinner on the last day. Stops only on day 1 and only when mode is "drive", at most 2. Use only indices that exist. Themes are 3-7 words. The summary is 2-3 sentences: name the total cost and why this mode is the best value, note the budget fit, and when safety_level is "elevated" include one concrete safety tip; use research for one specific, useful observation. Never invent prices or places.`, n)
+{"summary": string, "days": [{"theme": string, "activities": [int], "breakfast": int|null, "lunch": int|null, "dinner": int|null, "stops": [int]}]}
+"days" has exactly %d entries, in order. Day 1 is the travel-out day and the last day is the travel-home day: give each at most one activity (within 3 miles of center on the last day) and no activity on day 1 when the trip is long. Middle days get TWO activities (one for the morning, one for the afternoon) whenever two unused places of DIFFERENT types exist, preferring ones near each other; vary types across days too (not a small park every day; pick the most distinctive places first); prefer indoor types on days with 50%%+ rain and say so in the theme. Each activity index at most once in the whole trip. Meals come from the food list: "breakfast" must be an entry whose meal is "breakfast" (cafés, bakeries); "lunch" and "dinner" are restaurants (meal "any"), each restaurant used at most once across the trip, lunch near that day's morning activity and dinner near the hotel. Day 1: no breakfast (you are travelling) and dinner only unless you arrive by 13:00; last day: breakfast only. Stops only on day 1 and only when mode is "drive", at most 2. Use only indices that exist. Themes are 3-7 words. The summary is 2-3 sentences: name the total cost and why this mode is the best value, note the budget fit, and when safety_level is "elevated" include one concrete safety tip; use research for one specific, useful observation. Never invent prices or places.`, n)
 	var out outline
 	cctx, cancel := context.WithTimeout(ctx, 100*time.Second)
 	defer cancel()
@@ -620,9 +623,23 @@ func (p *Planner) outlineDays(ctx context.Context, req Request, plan *Plan, star
 
 	assign := make([]dayAssignment, n)
 	usedAct, usedFood := map[int]bool{}, map[int]bool{}
+	arrival := arrivalMinutes(plan, min(2, len(plan.Stops)))
+	defaults := planMeals(plan, n, arrival, 12*60)
+	// pickMeal takes the model's index when it is a valid, unused place of the
+	// right kind, else the deterministic default for that slot.
+	pickMeal := func(idx *int, wantBreakfast bool, def *travel.Place) *travel.Place {
+		if idx != nil && *idx >= 0 && *idx < len(plan.Food) && !usedFood[*idx] && isBreakfastPlace(plan.Food[*idx]) == wantBreakfast {
+			usedFood[*idx] = true
+			p := plan.Food[*idx]
+			return &p
+		}
+		return def
+	}
 	for i := 0; i < n; i++ {
+		wantB, wantL, wantD := mealsWanted(i, n, arrival, 12*60)
 		if i >= len(out.Days) {
 			assign[i].Theme = "Explore " + plan.DestPlace.Name
+			assign[i].Meals = defaults[i]
 			continue
 		}
 		d := out.Days[i]
@@ -645,14 +662,14 @@ func (p *Planner) outlineDays(ctx context.Context, req Request, plan *Plan, star
 			usedAct[idx] = true
 			assign[i].Activities = append(assign[i].Activities, pl)
 		}
-		if i < n-1 {
-			for _, idx := range d.Food {
-				if idx >= 0 && idx < len(plan.Food) && !usedFood[idx] {
-					usedFood[idx] = true
-					assign[i].Food = []travel.Place{plan.Food[idx]}
-					break
-				}
-			}
+		if wantB {
+			assign[i].Meals.Breakfast = pickMeal(d.Breakfast, true, defaults[i].Breakfast)
+		}
+		if wantL {
+			assign[i].Meals.Lunch = pickMeal(d.Lunch, false, defaults[i].Lunch)
+		}
+		if wantD {
+			assign[i].Meals.Dinner = pickMeal(d.Dinner, false, defaults[i].Dinner)
 		}
 		if i == 0 && plan.RecommendedMode == "drive" {
 			for _, idx := range d.Stops {
@@ -697,6 +714,14 @@ func (p *Planner) writeDay(ctx context.Context, plan *Plan, i int, date string, 
 		}
 		return out
 	}
+	// A road stop's cost is the refuel for the car, not per person.
+	stopFacts := func(list []travel.Place) []placeFacts {
+		out := make([]placeFacts, 0, len(list))
+		for _, pl := range list {
+			out = append(out, placeFacts{Name: pl.Name, Note: pl.Note, Miles: round1(distance(plan.OriginLoc, pl.Location)), GroupCostUSD: round2(pl.PriceUSD), PriceUnknown: pl.PriceUnknown})
+		}
+		return out
+	}
 	// Fixed items: the model keeps title, category and cost verbatim and only
 	// writes the time and the detail sentence.
 	type fixed struct {
@@ -709,8 +734,8 @@ func (p *Planner) writeDay(ctx context.Context, plan *Plan, i int, date string, 
 	var travelFacts []fixed
 	if i == 0 {
 		if plan.RecommendedMode == "drive" {
-			travelFacts = append(travelFacts, fixed{Title: "Depart " + plan.OriginPlace.Name, Category: "transport", CostUSD: plan.Drive.FuelCostUSD,
-				Facts: fmt.Sprintf("%.0f miles, about %dh %dm, fuel $%.0f one way; the stops below are on this route", plan.Drive.DistanceMiles, plan.Drive.DurationMin/60, plan.Drive.DurationMin%60, plan.Drive.FuelCostUSD)})
+			travelFacts = append(travelFacts, fixed{Title: "Depart " + plan.OriginPlace.Name, Category: "transport", CostUSD: plan.Drive.StartTankUSD,
+				Facts: fmt.Sprintf("%.0f miles, about %dh %dm; leave on a full tank (%.0f gal, ~%.0f mi range, $%.0f to fill); the stops below are the planned refuels on this route", plan.Drive.DistanceMiles, plan.Drive.DurationMin/60, plan.Drive.DurationMin%60, plan.Drive.TankGallons, plan.Drive.RangeMiles, plan.Drive.StartTankUSD)})
 		} else if f := first(plan.Flights); f != nil {
 			if a := plan.OriginAirport; a != nil && a.DistanceMiles > 20 {
 				travelFacts = append(travelFacts, fixed{Title: fmt.Sprintf("Travel to %s (%s)", a.Code, a.Name), Category: "transport", CostUnknown: true,
@@ -730,8 +755,11 @@ func (p *Planner) writeDay(ctx context.Context, plan *Plan, i int, date string, 
 	}
 	if i == n-1 {
 		if plan.RecommendedMode == "drive" {
-			travelFacts = append(travelFacts, fixed{Title: "Drive back to " + plan.OriginPlace.Name, Category: "transport", CostUSD: plan.Drive.FuelCostUSD,
-				Facts: fmt.Sprintf("%.0f miles, about %dh %dm; fuel for the return leg", plan.Drive.DistanceMiles, plan.Drive.DurationMin/60, plan.Drive.DurationMin%60)})
+			travelFacts = append(travelFacts, fixed{Title: "Drive back to " + plan.OriginPlace.Name, Category: "transport", CostUSD: plan.Drive.StartTankUSD,
+				Facts: fmt.Sprintf("%.0f miles, about %dh %dm; fill the tank before leaving ($%.0f)", plan.Drive.DistanceMiles, plan.Drive.DurationMin/60, plan.Drive.DurationMin%60, plan.Drive.StartTankUSD)})
+			if n := len(plan.Drive.Refuels); n > 0 {
+				travelFacts = append(travelFacts, refuelHomeItem(plan))
+			}
 		} else {
 			home := plan.OriginPlace.Name
 			if a := plan.OriginAirport; a != nil {
@@ -759,11 +787,11 @@ func (p *Planner) writeDay(ctx context.Context, plan *Plan, i int, date string, 
 		"timing_rules": dayTimingRules(plan, i, n, len(a.Stops)),
 		"travelers":    plan.Travelers, "local_transport": effectiveTransport(plan),
 		"weather": weatherText, "safety_level": plan.Safety.Level, "safety_tip": firstOf(plan.Safety.Tips),
-		"fixed_items": travelFacts, "activities": facts(a.Activities), "dinner": facts(a.Food), "stops": facts(a.Stops),
+		"fixed_items": travelFacts, "activities": facts(a.Activities), "meals": mealFacts(a.Meals, plan), "stops": stopFacts(a.Stops),
 	}
 	raw, _ := json.Marshal(data)
 	system := `You are the Writer agent of TPN, a budget-savvy travel planner, writing ONE day. Reply with JSON only: {"items":[{"time":"HH:MM","title":string,"detail":string,"cost_usd":number,"category":"transport|lodging|activity|food|stop"}]}.
-Rules: 3-7 items in clock order. Obey timing_rules exactly: they give the real arrival time and the latest time to be done before the trip home. Dinner is 17:30-20:30. Include every fixed_item as its own item copying its title, category and cost_usd exactly; write only its time and detail from its facts. Include every listed activity, dinner and stop exactly once: title is the exact name (dinner: "Dinner at <name>", category food; stops: category stop), cost_usd = group_cost_usd. Never add a place that is not listed and never invent a cost. Each detail is one concrete sentence of at most 25 words drawing on note, research_note and the weather; when safety_level is "elevated" keep evening items near the hotel and mention rideshare after 22:00. Say opening hours are unverified at most once per day. Leave gaps free rather than padding.`
+Rules: 4-9 items in clock order. Obey timing_rules exactly: they give the real arrival time and the latest time to be done before the trip home. Meal windows: breakfast 07:30-09:30, lunch 12:00-13:30, dinner 17:30-20:30. Include every fixed_item as its own item copying its title, category and cost_usd exactly; write only its time and detail from its facts. Include every listed activity, meal and stop exactly once: activities and stops use the exact name as the title; each meal uses its given title verbatim (e.g. "Lunch at <name>") with category food; cost_usd = group_cost_usd. Never add a place that is not listed and never invent a cost. Each detail is one concrete sentence of at most 25 words drawing on note, research_note and the weather; when safety_level is "elevated" keep evening items near the hotel and mention rideshare after 22:00. Say opening hours are unverified at most once per day. Leave gaps free rather than padding.`
 	var out dayResponse
 	cctx, cancel := context.WithTimeout(ctx, 100*time.Second)
 	defer cancel()
@@ -806,9 +834,79 @@ func dayTimingRules(plan *Plan, i, n, stops int) []string {
 		}
 	}
 	if i > 0 && i < n-1 {
-		rules = append(rules, "A full day: first activity 09:00-11:00, second 13:00-15:30, dinner 18:00-19:30.")
+		rules = append(rules, "A full day: breakfast 08:00-09:00, first activity 09:30-11:00, lunch 12:00-13:00, second activity 13:30-15:30, dinner 18:00-19:30.")
 	}
 	return rules
+}
+
+// refuelHomeItem is the return leg's gas stops rolled into one line, since
+// no stations are looked up for the way back.
+func refuelHomeItem(plan *Plan) struct {
+	Title       string  `json:"title"`
+	Category    string  `json:"category"`
+	CostUSD     float64 `json:"cost_usd"`
+	Facts       string  `json:"facts"`
+	CostUnknown bool    `json:"cost_unknown,omitempty"`
+} {
+	total := 0.0
+	for _, r := range plan.Drive.Refuels {
+		total += r.CostUSD
+	}
+	n := len(plan.Drive.Refuels)
+	return struct {
+		Title       string  `json:"title"`
+		Category    string  `json:"category"`
+		CostUSD     float64 `json:"cost_usd"`
+		Facts       string  `json:"facts"`
+		CostUnknown bool    `json:"cost_unknown,omitempty"`
+	}{Title: fmt.Sprintf("Refuel on the way home (%d stop%s)", n, plural(n)), Category: "transport", CostUSD: round2(total),
+		Facts: fmt.Sprintf("about every %.0f miles, %.1f gal each", plan.Drive.RangeMiles*0.85, plan.Drive.Refuels[0].Gallons)}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// indexFood lists the food candidates for the outline with their meal kind.
+func indexFood(plan *Plan) []map[string]any {
+	out := make([]map[string]any, 0, len(plan.Food))
+	for i, pl := range plan.Food {
+		meal := "any"
+		if isBreakfastPlace(pl) {
+			meal = "breakfast"
+		}
+		out = append(out, map[string]any{"i": i, "name": pl.Name, "meal": meal, "miles_from_center": round1(distance(plan.DestLoc, pl.Location)), "note": pl.Note})
+	}
+	return out
+}
+
+// mealFacts describes a day's meals for the Writer, each with the exact
+// title it must use and the group cost (lunch at the lunch rate).
+func mealFacts(m dayMeals, plan *Plan) []map[string]any {
+	trav := float64(max(1, plan.Travelers))
+	var out []map[string]any
+	add := func(slot string, p *travel.Place, factor float64) {
+		if p == nil {
+			return
+		}
+		f := map[string]any{"slot": slot, "title": mealTitle(slot, *p), "name": p.Name, "note": p.Note,
+			"miles_from_center": round1(distance(plan.DestLoc, p.Location)), "group_cost_usd": round2(p.PriceUSD * factor * trav), "price_unknown": p.PriceUnknown}
+		if plan.Research != nil {
+			for _, rn := range plan.Research.PlaceNotes {
+				if strings.EqualFold(strings.TrimSpace(rn.Name), strings.TrimSpace(p.Name)) {
+					f["research_note"] = rn.Note
+				}
+			}
+		}
+		out = append(out, f)
+	}
+	add("breakfast", m.Breakfast, 1)
+	add("lunch", m.Lunch, lunchFactor)
+	add("dinner", m.Dinner, 1)
+	return out
 }
 
 func firstNonEmptyStr(s ...string) string {
@@ -866,16 +964,19 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 	days := []Day{}
 	total := plan.Nights + 1
 	activitiesByDay := dailyActivities(plan.Activities, plan.DestLoc, plan.Weather, start, plan.Nights)
-	mealsByDay := dailyMeals(plan.Food, plan.DestLoc, activitiesByDay, plan.Nights)
+	homeAt := 12 * 60
+	mealsByDay := planMeals(plan, total, arrivalMinutes(plan, min(2, len(plan.Stops))), homeAt)
 	for i := 0; i < total; i++ {
 		d := Day{Day: i + 1, Date: start.AddDate(0, 0, i).Format("2006-01-02")}
 		switch {
 		case i == 0:
 			d.Theme = "Travel day"
 			if plan.RecommendedMode == "drive" {
-				d.Items = append(d.Items, DayItem{Time: "08:00", Title: "Depart " + plan.OriginPlace.Name, Detail: fmt.Sprintf("%.0f mi, about %dh %dm", plan.Drive.DistanceMiles, plan.Drive.DurationMin/60, plan.Drive.DurationMin%60), CostUSD: plan.Drive.FuelCostUSD, Category: "transport"})
-				for _, s := range plan.Stops[:min(2, len(plan.Stops))] {
-					d.Items = append(d.Items, DayItem{Time: "11:30", Title: s.Name, Detail: s.Note, CostUSD: s.PriceUSD, Category: "stop"})
+				d.Items = append(d.Items, DayItem{Time: "08:00", Title: "Depart " + plan.OriginPlace.Name, Detail: fmt.Sprintf("%.0f mi, about %dh %dm; leave on a full tank (%.0f gal, $%.0f to fill)", plan.Drive.DistanceMiles, plan.Drive.DurationMin/60, plan.Drive.DurationMin%60, plan.Drive.TankGallons, plan.Drive.StartTankUSD), CostUSD: plan.Drive.StartTankUSD, Category: "transport"})
+				for k, s := range plan.Stops {
+					// Space the stops across the drive by their position on the route.
+					at := departMin + int(float64(plan.Drive.DurationMin)*float64(k+1)/float64(len(plan.Stops)+1))
+					d.Items = append(d.Items, DayItem{Time: fmtHM(at), Title: s.Name, Detail: s.Note, CostUSD: s.PriceUSD, CostUnknown: s.PriceUnknown, Category: "stop"})
 				}
 			} else if len(plan.Flights) > 0 {
 				f := plan.Flights[plan.SelectedFlight]
@@ -897,17 +998,30 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 			if h := first(plan.Hotels); h != nil {
 				d.Items = append(d.Items, DayItem{Time: "16:00", Title: "Check in: " + h.Name, Detail: fmt.Sprintf("%d nights at $%.0f/night · %s", h.Nights, h.NightlyUSD, h.Area), CostUSD: h.TotalUSD, Category: "lodging"})
 			}
-			if f := mealsByDay[i]; f != nil {
-				d.Items = append(d.Items, DayItem{Time: "19:00", Title: "Dinner at " + f.Name, Detail: f.Note + "; dinner hours and availability unverified", CostUSD: f.PriceUSD * float64(req.Travelers), CostUnknown: f.PriceUnknown, Category: "food"})
+			if f := mealsByDay[i].Lunch; f != nil {
+				d.Items = append(d.Items, mealItem("lunch", "12:30", *f, req.Travelers))
+			}
+			if f := mealsByDay[i].Dinner; f != nil {
+				d.Items = append(d.Items, mealItem("dinner", "19:00", *f, req.Travelers))
 			}
 		case i == total-1:
 			d.Theme = "Head home"
+			if f := mealsByDay[i].Breakfast; f != nil {
+				d.Items = append(d.Items, mealItem("breakfast", "08:00", *f, req.Travelers))
+			}
+			if f := mealsByDay[i].Lunch; f != nil {
+				d.Items = append(d.Items, mealItem("lunch", "12:15", *f, req.Travelers))
+			}
 			if len(activitiesByDay[i]) > 0 {
 				a := activitiesByDay[i][0]
 				d.Items = append(d.Items, DayItem{Time: "09:00", Title: a.Name, Detail: a.Note + " · " + localTravelDetail(plan, a), CostUSD: a.PriceUSD * float64(req.Travelers), Category: "activity"})
 			}
 			if plan.RecommendedMode == "drive" {
-				d.Items = append(d.Items, DayItem{Time: "12:00", Title: "Drive back to " + plan.OriginPlace.Name, Detail: "fuel for the return leg", CostUSD: plan.Drive.FuelCostUSD, Category: "transport"})
+				d.Items = append(d.Items, DayItem{Time: "12:00", Title: "Drive back to " + plan.OriginPlace.Name, Detail: fmt.Sprintf("fill the tank before leaving ($%.0f)", plan.Drive.StartTankUSD), CostUSD: plan.Drive.StartTankUSD, Category: "transport"})
+				if len(plan.Drive.Refuels) > 0 {
+					r := refuelHomeItem(plan)
+					d.Items = append(d.Items, DayItem{Time: "15:00", Title: r.Title, Detail: r.Facts, CostUSD: r.CostUSD, Category: "transport"})
+				}
 			} else {
 				home := plan.OriginPlace.Name
 				if a := plan.OriginAirport; a != nil {
@@ -934,8 +1048,14 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 				// Late items get a safety nudge; the AI path gets the same instruction in its prompt.
 				d.Items = append(d.Items, DayItem{Time: "21:30", Title: "Evening out near the hotel", Detail: "rideshare back after 10pm (safety: elevated)", CostUSD: 0, Category: "activity"})
 			}
-			if f := mealsByDay[i]; f != nil {
-				d.Items = append(d.Items, DayItem{Time: "18:30", Title: "Dinner at " + f.Name, Detail: f.Note + "; dinner hours and availability unverified", CostUSD: f.PriceUSD * float64(req.Travelers), CostUnknown: f.PriceUnknown, Category: "food"})
+			if f := mealsByDay[i].Breakfast; f != nil {
+				d.Items = append(d.Items, mealItem("breakfast", "08:30", *f, req.Travelers))
+			}
+			if f := mealsByDay[i].Lunch; f != nil {
+				d.Items = append(d.Items, mealItem("lunch", "12:30", *f, req.Travelers))
+			}
+			if f := mealsByDay[i].Dinner; f != nil {
+				d.Items = append(d.Items, mealItem("dinner", "18:30", *f, req.Travelers))
 			}
 		}
 		// Keep each day in clock order (the safety nudge is appended late).

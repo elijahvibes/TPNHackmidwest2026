@@ -18,7 +18,13 @@ import (
 // "dinner" never lands at 12:30.
 
 const (
-	departMin     = 8 * 60     // every trip leaves home at 08:00
+	departMin     = 8 * 60 // every trip leaves home at 08:00
+	breakfastOpen = 7 * 60 // breakfast window
+	breakfastEnd  = 10 * 60
+	breakfastDef  = 8*60 + 30
+	lunchOpen     = 11*60 + 30 // lunch window
+	lunchEnd      = 14 * 60
+	lunchDef      = 12*60 + 30
 	dinnerEarly   = 17*60 + 30 // dinner window
 	dinnerLate    = 20*60 + 30 //
 	dinnerDefault = 18*60 + 30 //
@@ -73,9 +79,9 @@ func arrivalMinutes(plan *Plan, stops int) int {
 	return at
 }
 
-func isDinner(it DayItem) bool {
-	return it.Category == "food" && strings.HasPrefix(strings.ToLower(it.Title), "dinner")
-}
+func isDinner(it DayItem) bool    { return mealSlot(it) == "dinner" }
+func isBreakfast(it DayItem) bool { return mealSlot(it) == "breakfast" }
+func isLunch(it DayItem) bool     { return mealSlot(it) == "lunch" }
 
 func isHomeLeg(it DayItem) bool {
 	t := strings.ToLower(it.Title)
@@ -139,6 +145,17 @@ func normalizeSchedule(plan *Plan, days []Day) []string {
 				if t < arrival+60 {
 					move(arrival+60, "after arrival")
 				}
+			case first && isBreakfast(it):
+				notes = append(notes, fmt.Sprintf("day %d: %s dropped (on the road at breakfast time)", d.Day, it.Title))
+				continue
+			case first && isLunch(it):
+				if arrival+30 > lunchEnd {
+					notes = append(notes, fmt.Sprintf("day %d: %s dropped (arrival %s is after lunch)", d.Day, it.Title, fmtHM(arrival)))
+					continue
+				}
+				if t < arrival+30 || t > lunchEnd {
+					move(max(lunchDef, arrival+30), "lunch after arrival")
+				}
 			case first && isDinner(it):
 				earliest := max(dinnerDefault, arrival+45)
 				if earliest > dinnerCutoff {
@@ -154,6 +171,14 @@ func normalizeSchedule(plan *Plan, days []Day) []string {
 			case isDinner(it):
 				if t < dinnerEarly || t > dinnerLate {
 					move(dinnerDefault, "dinner hours")
+				}
+			case isBreakfast(it):
+				if t < breakfastOpen || t > breakfastEnd {
+					move(breakfastDef, "breakfast hours")
+				}
+			case isLunch(it):
+				if t < lunchOpen || t > lunchEnd {
+					move(lunchDef, "lunch hours")
 				}
 			case it.Category == "activity" && !first:
 				if t < activityOpen {
@@ -199,16 +224,20 @@ func normalizeSchedule(plan *Plan, days []Day) []string {
 						kept = append(kept, it)
 						continue
 					}
-					// Each timed stop takes about two hours, then the home leg's lead time.
-					need := t + 120 + lead
+					// A stop takes about two hours (a meal one), then the home leg's lead time.
+					dur := 120
+					if it.Category == "food" {
+						dur = 60
+					}
+					need := t + dur + lead
 					if need > homeAt {
 						switch {
 						case need <= latest:
 							notes = append(notes, fmt.Sprintf("day %d: trip home moved %s → %s to fit %s", d.Day, fmtHM(homeAt), fmtHM(need), it.Title))
 							homeAt = need
-						case latest-lead-120 >= activityOpen:
+						case latest-lead-dur >= activityOpen-60:
 							// Start the stop early enough instead of dropping it.
-							early := latest - lead - 120
+							early := latest - lead - dur
 							notes = append(notes, fmt.Sprintf("day %d: %s moved %s → %s and trip home %s → %s", d.Day, it.Title, fmtHM(t), fmtHM(early), fmtHM(homeAt), fmtHM(latest)))
 							it.Time = fmtHM(early)
 							homeAt = latest
@@ -238,19 +267,24 @@ func normalizeSchedule(plan *Plan, days []Day) []string {
 			return ta < tb
 		})
 		// Spacing applies between the stops that take time (activities and
-		// meals); check-in and travel legs are not padded.
-		prev := -1
+		// meals); check-in and travel legs are not padded. A meal needs an
+		// hour, an activity ninety minutes, before the next stop.
+		prev, prevFood := -1, false
 		for i := range d.Items {
 			it := &d.Items[i]
 			t, ok := parseHM(it.Time)
 			if !ok || (it.Category != "activity" && it.Category != "food") {
 				continue
 			}
-			if prev >= 0 && t < prev+spacing {
-				t = prev + spacing
+			gap := spacing
+			if prevFood {
+				gap = 60
+			}
+			if prev >= 0 && t < prev+gap {
+				t = prev + gap
 				it.Time = fmtHM(t)
 			}
-			prev = t
+			prev, prevFood = t, it.Category == "food"
 		}
 		sort.SliceStable(d.Items, func(a, b int) bool {
 			ta, oka := parseHM(d.Items[a].Time)

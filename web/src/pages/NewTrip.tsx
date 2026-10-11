@@ -20,7 +20,7 @@ export default function NewTrip() {
       // Planning runs in the background; the trip page shows the draft within
       // seconds and streams the AI agents' progress while they refine it.
       // Pinned points from the autocomplete ride along so the planner never re-guesses the place.
-      const { job_id } = await api.startTripPlan(trip.id, { vehicle_mpg: v.vehicle_mpg, interests: v.interests, origin_loc: v.origin_loc, dest_loc: v.dest_loc,
+      const { job_id } = await api.startTripPlan(trip.id, { vehicle_mpg: v.vehicle_mpg, tank_gallons: v.tank_gallons, interests: v.interests, origin_loc: v.origin_loc, dest_loc: v.dest_loc,
         local_transport: v.local_transport, activity_radius_miles: v.activity_radius_miles })
       nav(`/app/trips/${trip.id}?job=${job_id}`)
     } catch (e) { setErr((e as Error).message); setBusy(false) }

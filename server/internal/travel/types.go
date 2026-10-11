@@ -81,6 +81,21 @@ type DriveEstimate struct {
 	RoundTripUSD  float64 `json:"round_trip_usd"`
 	VehicleMPG    float64 `json:"vehicle_mpg"`
 	Source        string  `json:"source"`
+
+	// Fuel is bought a tank at a time: fill up before leaving, then refuel
+	// on the road every ~85% of the range. Costs are per direction; the
+	// return leg repeats the pattern from the destination.
+	TankGallons  float64  `json:"tank_gallons"`
+	RangeMiles   float64  `json:"range_miles"`
+	StartTankUSD float64  `json:"start_tank_usd"` // fill up before you leave
+	Refuels      []Refuel `json:"refuels"`        // on the road, one way
+}
+
+// Refuel is one planned stop for gas, one way.
+type Refuel struct {
+	AtMile  float64 `json:"at_mile"` // distance from the origin
+	Gallons float64 `json:"gallons"`
+	CostUSD float64 `json:"cost_usd"`
 }
 
 type Place struct {

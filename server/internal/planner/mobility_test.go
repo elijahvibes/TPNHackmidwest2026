@@ -125,7 +125,7 @@ func TestExpandedScheduleCostMatchesPlannedItems(t *testing.T) {
 	}
 	plan.Food = []travel.Place{{Name: "Meal", Location: plan.DestLoc, PriceUSD: 12}}
 	start, _ := time.Parse("2006-01-02", plan.Flights[0].Depart)
-	cost := plannedPlaceCost(plan.Activities, plan.Food, plan.DestLoc, plan.Weather, start, plan.Nights, plan.Travelers)
+	cost := plannedPlaceCost(plan.Activities, plan.Food, plan.DestLoc, plan.Weather, start, plan.Nights, plan.Travelers, arrivalMinutes(plan, 0))
 	_, days := fallbackItinerary(Request{Travelers: plan.Travelers}, plan, start)
 	actual := 0.0
 	for _, day := range days {

@@ -150,8 +150,11 @@ export default function TripForm({ onSubmit, busy, submitLabel = 'plan it', defa
             <input className="input" value={car.make} onChange={e => setCar({ ...car, make: e.target.value })} placeholder="make" aria-label="make" />
             <input className="input" value={car.model} onChange={e => setCar({ ...car, model: e.target.value })} placeholder="model" aria-label="model" />
             <button type="button" className="btn-ghost whitespace-nowrap" onClick={lookupMPG}>mpg</button>
+            <input className="input !w-24" type="number" min={5} max={60} step={0.5} value={v.tank_gallons ?? ''} placeholder="14 gal"
+              onChange={e => set('tank_gallons', e.target.value ? +e.target.value : undefined)} aria-label="tank size in gallons" title="fuel tank size (gallons); gas is priced a tank at a time" />
           </div>
           {mpgNote && <div className="mono text-[11px] text-muted mt-1">{mpgNote}</div>}
+          <div className="mono text-[11px] text-dim mt-1">tank size sets the range: you leave on a full tank and the plan places a refuel stop each time it runs low</div>
         </div>
       </div>
 
