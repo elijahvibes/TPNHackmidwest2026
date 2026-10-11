@@ -14,10 +14,10 @@ import (
 
 // Deps is everything a handler can reach. Built once in main.
 type Deps struct {
-	DB       *sql.DB
-	Auth     *auth.Service
-	Planner  *planner.Planner
-	Fuel     *travel.Fuel
+	DB      *sql.DB
+	Auth    *auth.Service
+	Planner *planner.Planner
+	Fuel    *travel.Fuel
 }
 
 // requireDB returns 503 for routes that need Postgres when it is unavailable.
@@ -35,10 +35,10 @@ func (d *Deps) requireDB(next http.Handler) http.Handler {
 func Mount(r chi.Router, d *Deps) {
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, 200, map[string]any{
-			"ok":       true,
-			"db":       d.DB != nil,
-			"ai":       d.Planner.AI.Enabled(),
-			"serpapi":  d.Planner.SerpAPI.Enabled(),
+			"ok":      true,
+			"db":      d.DB != nil,
+			"ai":      d.Planner.AI.Enabled(),
+			"serpapi": d.Planner.SerpAPI.Enabled(),
 		})
 	})
 

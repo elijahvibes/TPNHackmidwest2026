@@ -70,19 +70,19 @@ func loadDotEnv() {
 func Load() Config {
 	loadDotEnv()
 	c := Config{
-		Port:             env("PORT", "8080"),
-		DatabaseURL:      env("DATABASE_URL", "mysql://trailmix:trailmix@localhost:3306/trailmix"),
-		JWTSecret:        env("JWT_SECRET", ""),
-		StaticDir:        env("STATIC_DIR", ""),
-		CORSOrigin:       env("CORS_ORIGIN", "http://localhost:5173"),
-		AIBaseURL:        env("AI_BASE_URL", ""),
-		AIAPIKey:         env("AI_API_KEY", ""),
-		AIModel:          env("AI_MODEL", "hackathon-chat"),
-		SerpAPIKey:       env("SERPAPI_KEY", ""),
-		EIAKey:           env("EIA_KEY", ""),
-		PlacesKey:        env("GOOGLE_PLACES_KEY", ""),
-		GeoapifyKey:      env("GEOAPIFY_KEY", ""),
-		MapboxToken:      env("MAPBOX_TOKEN", ""),
+		Port:        env("PORT", "8080"),
+		DatabaseURL: env("DATABASE_URL", "mysql://trailmix:trailmix@localhost:3306/trailmix"),
+		JWTSecret:   env("JWT_SECRET", ""),
+		StaticDir:   env("STATIC_DIR", ""),
+		CORSOrigin:  env("CORS_ORIGIN", "http://localhost:5173"),
+		AIBaseURL:   env("AI_BASE_URL", ""),
+		AIAPIKey:    env("AI_API_KEY", ""),
+		AIModel:     env("AI_MODEL", "hackathon-chat"),
+		SerpAPIKey:  env("SERPAPI_KEY", ""),
+		EIAKey:      env("EIA_KEY", ""),
+		PlacesKey:   env("GOOGLE_PLACES_KEY", ""),
+		GeoapifyKey: env("GEOAPIFY_KEY", ""),
+		MapboxToken: env("MAPBOX_TOKEN", ""),
 	}
 	c.MockMode, _ = strconv.ParseBool(env("MOCK_MODE", "false"))
 	if c.JWTSecret == "" {
