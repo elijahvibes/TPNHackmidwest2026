@@ -59,7 +59,8 @@ func TestRainAwareAssignReplacesFromSpareAndLeavesUnknownForecast(t *testing.T) 
 	if assign[1].Activities[0].Name != "Cheesman Park" || len(notes) != 1 || !strings.Contains(notes[0], "added") {
 		t.Errorf("outlook for other dates must not move the park (only the top-up applies): %v %+v", notes, assign[1])
 	}
-	if !isOutdoor(park) || isOutdoor(mint) || !isOutdoor(travel.Place{Name: "Red Rocks Park and Amphitheatre"}) {
+	if !isOutdoor(park) || isOutdoor(mint) || !isOutdoor(travel.Place{Name: "Red Rocks Park and Amphitheatre"}) ||
+		!isOutdoor(travel.Place{Name: "Denver Zoo", Categories: []string{"wikivoyage.see"}}) || isOutdoor(travel.Place{Name: "Colorado State Capitol"}) {
 		t.Error("isOutdoor")
 	}
 }

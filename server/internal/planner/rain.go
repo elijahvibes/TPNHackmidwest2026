@@ -25,7 +25,7 @@ func isOutdoor(p travel.Place) bool {
 		return false
 	}
 	n := strings.ToLower(p.Name)
-	for _, k := range []string{"park", "garden", "trail", "lake", "falls", "canyon", "mountain", "beach", "amphitheat", "overlook", "viewpoint", "reservoir", "creek", "river", "arboretum", "cemetery", "hike", "ski"} {
+	for _, k := range []string{"park", "garden", "trail", "lake", "falls", "canyon", "mountain", "beach", "amphitheat", "overlook", "viewpoint", "reservoir", "creek", "river", "arboretum", "cemetery", "hike", "ski", "zoo", "wildlife", "farm", "ranch", "rooftop", "plaza", "boardwalk", "pier"} {
 		if strings.Contains(n, k) {
 			return true
 		}
