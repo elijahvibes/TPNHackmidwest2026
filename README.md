@@ -58,9 +58,9 @@ Open http://localhost:5173. Vite proxies `/api` to the Go server on :8080.
 | GET | `/api/health` | no | database availability and which integrations are configured |
 | POST | `/api/auth/register` `/login` | no | returns a JWT |
 | GET/PATCH | `/api/auth/me` | yes | profile; PATCH stores home geolocation |
-| GET | `/api/vehicles/mpg?year&make&model` | no | combined MPG from fueleconomy.gov |
-| GET | `/api/geo/suggest?q=law` | no | city / town / park autocomplete (any place, US first) |
-| POST | `/api/plan/preview` | no | price + plan a trip without saving (landing page demo) |
+| GET | `/api/vehicles/mpg?year&make&model` | yes | combined MPG from fueleconomy.gov |
+| GET | `/api/geo/suggest?q=law` | yes | city / town / park autocomplete (any place, US first) |
+| POST | `/api/plan/preview` | yes | price + plan a trip without saving (the planner on the home page) |
 | GET/POST | `/api/trips` | yes | list / create |
 | GET/DELETE | `/api/trips/{id}` | yes | one trip |
 | POST | `/api/trips/{id}/plan` | yes | run the planner, store the itinerary; body may carry `mode`, `origin_loc`, `dest_loc`, `vehicle_mpg`, `interests` |

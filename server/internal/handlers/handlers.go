@@ -42,17 +42,7 @@ func Mount(r chi.Router, d *Deps) {
 		})
 	})
 
-	// No login needed: the landing-page demo uses all of these.
-	r.Post("/plan/preview", d.planPreview)
-	r.Post("/plan/preview/start", d.startPreview) // background job; poll /plan/jobs/{id}
-	r.Get("/plan/jobs/{id}", d.planJobStatus)
-	r.Post("/plan/flight", d.selectPreviewFlight)
-	r.Post("/flights/returns", d.returnFlights)
-	r.Post("/flights/bookings", d.flightBookings)
-	r.Post("/flights/booking-redirect", resolveFlightBooking)
-	r.Get("/vehicles/mpg", d.vehicleMPG)
-	r.Get("/geo/suggest", d.geoSuggest) // city autocomplete (any city, not just the demo list)
-
+	// No login needed: sign-up, sign-in and the read-only share page.
 	r.Group(func(r chi.Router) {
 		r.Use(d.requireDB)
 		r.Post("/auth/register", d.register)
@@ -60,10 +50,21 @@ func Mount(r chi.Router, d *Deps) {
 		r.Get("/share/{id}", d.shareTrip) // public read-only plan by unguessable id
 	})
 
+	// Everything else, planning included, needs an account.
 	r.Group(func(r chi.Router) {
 		r.Use(d.requireDB, d.Auth.Middleware)
 		r.Get("/auth/me", d.me)
 		r.Patch("/auth/me", d.updateMe)
+
+		r.Post("/plan/preview", d.planPreview)
+		r.Post("/plan/preview/start", d.startPreview) // background job; poll /plan/jobs/{id}
+		r.Get("/plan/jobs/{id}", d.planJobStatus)
+		r.Post("/plan/flight", d.selectPreviewFlight)
+		r.Post("/flights/returns", d.returnFlights)
+		r.Post("/flights/bookings", d.flightBookings)
+		r.Post("/flights/booking-redirect", resolveFlightBooking)
+		r.Get("/vehicles/mpg", d.vehicleMPG)
+		r.Get("/geo/suggest", d.geoSuggest) // city autocomplete (any city, not just the demo list)
 
 		r.Get("/trips", d.listTrips)
 		r.Post("/trips", d.createTrip)

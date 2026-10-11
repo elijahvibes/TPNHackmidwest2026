@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || '?'
@@ -6,6 +6,7 @@ const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).m
 export default function Layout() {
   const { user, logout } = useAuth()
   const nav = useNavigate()
+  const { pathname } = useLocation()
   const link = ({ isActive }: { isActive: boolean }) => `text-sm transition-colors ${isActive ? 'text-ink font-medium' : 'text-muted hover:text-ink'}`
   return (
     <div className="min-h-full flex flex-col">
@@ -25,7 +26,6 @@ export default function Layout() {
               </>
             ) : (
               <>
-                <NavLink to="/" end className={link}>Plan a trip</NavLink>
                 <NavLink to="/login" className={link}>Log in</NavLink>
                 <Link to="/register" className="btn-primary !py-1.5">Sign up</Link>
               </>
@@ -33,7 +33,7 @@ export default function Layout() {
           </nav>
         </div>
       </header>
-      <main className="flex-1 max-w-6xl w-full mx-auto px-5 py-10">
+      <main key={pathname} className="flex-1 max-w-6xl w-full mx-auto px-5 py-10 page-enter">
         <Outlet />
       </main>
       <footer className="border-t border-line">
