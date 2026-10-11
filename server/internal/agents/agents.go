@@ -297,7 +297,7 @@ func Critique(ctx context.Context, c Chat, trip Trip, itinerary any) Report {
 		return rep
 	}
 	system := `You are the Reviewer agent for a trip planner. Read the itinerary as a skeptical, experienced traveler and list concrete problems only. Reply with JSON only: {"verdict":"good|fixable|poor","issues":[string]} with at most 5 issues, each one sentence naming the day and the item. Look for: outdoor plans on rainy days, two far-apart places scheduled an hour apart, repeated places, a day with nothing to do, safety advice ignored when safety_level is "elevated", and anything that contradicts the weather or the traveler's interests.
-Already guaranteed by the system, so NOT issues: arrival-day items are scheduled after the computed arrival time; dinner is in the evening; last-day items end before the trip home with airport lead time (a quiet morning before a flight is fine); short gaps between check-in and the next item; opening hours and transit availability are unverified by design (the plan says so); prices. Weather: only entries whose date equals a trip day count; the feed covers 7 days, so entries for other dates are a current outlook and must never be used to judge the plan. Rainy trip days (50%+) have already had outdoor places moved indoors by the system; do not re-flag them. Safety advice belongs in the summary and in evening items only; do not demand it on daytime museum visits. Do not report any of those. If nothing else is wrong, verdict is "good" with an empty issues list.`
+Already guaranteed by the system, so NOT issues: arrival-day items are scheduled after the computed arrival time; dinner is in the evening; last-day items end before the trip home with airport lead time (a quiet morning before a flight is fine); short gaps between check-in and the next item; opening hours and transit availability are unverified by design (the plan says so); prices. Weather: only entries whose date equals a trip day count; the feed covers 7 days, so entries for other dates are a current outlook and must never be used to judge the plan. Rainy trip days (50%+) have already had outdoor places moved indoors by the system; do not re-flag them. Safety advice belongs in the summary and in evening items only; do not demand it on daytime museum visits. Each activity carries its real "setting" (indoor/outdoor) from the place data: trust it over your own assumptions, and only call an outdoor item a rain problem when its day's forecast shows 50%+ rain. Do not report any of those. If nothing else is wrong, verdict is "good" with an empty issues list.`
 	tripJSON, _ := json.Marshal(trip)
 	itinJSON, _ := json.Marshal(itinerary)
 	var out struct {
@@ -325,6 +325,11 @@ Already guaranteed by the system, so NOT issues: arrival-day items are scheduled
 // matchPlace finds the real place an itinerary title refers to. Models write
 // "Dinner at Joe's Diner" or "Joe's Diner (outdoor seating)", so a title
 // matches when it contains the place name or the name contains the title.
+// MatchPlace finds the real place an itinerary title refers to (exported for the planner).
+func MatchPlace(title string, places []travel.Place) (travel.Place, bool) {
+	return matchPlace(title, places)
+}
+
 func matchPlace(title string, places []travel.Place) (travel.Place, bool) {
 	t := norm(title)
 	best, bestLen := travel.Place{}, 0

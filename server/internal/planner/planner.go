@@ -183,6 +183,7 @@ func (p *Planner) review(ctx context.Context, trip agents.Trip, plan *Plan) []ag
 	// a shared, slow endpoint.
 	type line struct {
 		Time, Title, Category string
+		Setting               string `json:"setting,omitempty"` // indoor | outdoor, from the place data
 	}
 	type dayView struct {
 		Day   int
@@ -190,11 +191,24 @@ func (p *Planner) review(ctx context.Context, trip agents.Trip, plan *Plan) []ag
 		Theme string
 		Items []line
 	}
+	setting := func(title string) string {
+		if p, ok := agents.MatchPlace(title, known.Places); ok {
+			if isOutdoor(p) {
+				return "outdoor"
+			}
+			return "indoor"
+		}
+		return ""
+	}
 	compact := make([]dayView, 0, len(plan.Days))
 	for _, d := range plan.Days {
 		dv := dayView{Day: d.Day, Date: d.Date, Theme: d.Theme}
 		for _, it := range d.Items {
-			dv.Items = append(dv.Items, line{it.Time, it.Title, it.Category})
+			l := line{Time: it.Time, Title: it.Title, Category: it.Category}
+			if it.Category == "activity" {
+				l.Setting = setting(it.Title)
+			}
+			dv.Items = append(dv.Items, l)
 		}
 		compact = append(compact, dv)
 	}
