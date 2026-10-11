@@ -47,7 +47,7 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
           <span>{plan.origin_place?.label ?? plan.title.split('→')[0]}</span>
           <Icon name="arrow" size={14} />
           <span>{plan.dest_place?.label ?? plan.title.split('→')[1]}</span>
-          {meta?.status && <span className={`tag capitalize ml-1 ${meta.status === 'booked' ? 'text-accent border-accent/50 bg-accent-soft' : ''}`}>{meta.status}</span>}
+          {meta?.status && <span className="tag capitalize ml-1">{meta.status}</span>}
         </div>
         <p className="text-[15px] text-muted mt-4 max-w-3xl leading-relaxed">{plan.summary}</p>
         <div className="flex flex-wrap items-center gap-2 mt-4 print:hidden">

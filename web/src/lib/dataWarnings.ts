@@ -72,9 +72,6 @@ export function planEstimates(plan: Plan): string[] {
   return notes
 }
 
-export function isMockPayment(ref: string | null): boolean {
-  return ref?.startsWith('JH-MOCK-') ?? false
-}
 
 export function planRealData(plan: Plan): string[] {
   const real: string[] = []

@@ -1,6 +1,6 @@
 # trailmix — Engineering Plan
 
-HackMidwest 2026 · Go backend + TypeScript frontend · hosted and inferencing on Akamai · payments by Jack Henry
+HackMidwest 2026 · Go backend + TypeScript frontend · hosted and inferencing on Akamai
 
 This is the working plan for the team. Sections 1–2 describe what exists today. Section 3 is the
 work, broken into streams you can pick up independently. Section 4 is the priority order; Section 5
@@ -19,10 +19,9 @@ untested (needs Postgres or an API key) · ⬜ not started.
 |---|---|---|---|
 | HTTP server, CORS, static SPA serving | `cmd/api/main.go` | ✅ | Runs in degraded mode if Postgres is down |
 | Config from env | `internal/config` | ✅ | `SERPAPI_KEY` required for trip planning; other integrations optional |
-| MySQL (Akamai managed) + auto-migrations | `internal/db`, `migrations/001_init.sql` | ✅ | Tables: users, vehicles, trips, payments |
+| MySQL (Akamai managed) + auto-migrations | `internal/db`, `migrations/001_init.sql` | ✅ | Tables: users, vehicles, trips |
 | Register / login / me / update home location | `internal/handlers/auth.go` | 🟡 | bcrypt + 7-day JWT |
 | Trips CRUD + plan + preview | `internal/handlers/trips.go` | 🟡 preview ✅ | Plan stored as JSONB on the trip |
-| Payments (Jack Henry) | `internal/handlers/payments.go`, `internal/payments` | 🟡 mock ✅ | Generic REST shape, needs sandbox docs |
 | Planner + value scoring + fallback itinerary | `internal/planner` | ✅ | 4 unit tests pass |
 | AI client (OpenAI-compatible) | `internal/ai` | 🟡 | Needs `AI_BASE_URL` |
 | Geocoding + routing | `internal/travel/geo.go` | ✅ gazetteer / 🟡 Mapbox | 22 cities built in |
@@ -52,7 +51,6 @@ untested (needs Postgres or an API key) · ⬜ not started.
 | `.env.example`, README with Linode steps | ✅ |
 | Linode instance, domain, TLS | ⬜ |
 | Akamai inference endpoint | ⬜ |
-| Jack Henry sandbox credentials | ⬜ |
 
 ---
 
@@ -63,14 +61,13 @@ untested (needs Postgres or an API key) · ⬜ not started.
    │  /api/*  (JWT in Authorization header)
    ▼
  Go API  ──────────────────────────────┐
-   ├─ handlers  (auth, trips, payments)│
-   ├─ planner   (orchestrates below)   │   Akamai Managed MySQL (users, vehicles, trips.plan JSON, payments)
+   ├─ handlers  (auth, trips)          │
+   ├─ planner   (orchestrates below)   │   Akamai Managed MySQL (users, vehicles, trips.plan JSON)
    │    ├─ travel.Geo      → Mapbox            (geocode, directions)
    │    ├─ travel.Fuel     → fueleconomy.gov    (MPG, no key)   + EIA (gas $/gal)
    │    ├─ travel.SerpAPI  → Google Travel via SerpApi (flights, hotels)
    │    ├─ travel.Places   → Google Places New  (attractions, food, rest stops)
    │    └─ ai.Client       → Akamai Inference   (OpenAI-compatible chat completions)
-   └─ payments.Client      → Jack Henry sandbox
 ```
 
 Request flow for "plan my trip":
@@ -160,17 +157,6 @@ Risk: Docker Desktop on the Windows laptop would not start its engine today. If 
 | F6 | Empty/error states: DB down, AI down, over budget — each has a clear message | S | |
 | F7 | Polish: favicon, OG tags, 404 page, keyboard focus states | S | |
 
-### G. Payments — Jack Henry (owner: ____)
-
-| # | Task | Size | Done when |
-|---|---|---|---|
-| G1 | Get sandbox docs + credentials from the sponsor; identify the exact endpoint for "create payment/transfer" and its auth scheme | S | Written down in `docs/jackhenry.md` |
-| G2 | Update `payments/jackhenry.go`: real path, payload, response parsing; keep mock fallback | M | `/api/health` shows `"payments":true`, a charge appears in the sandbox |
-| G3 | Linked account: if the sandbox exposes accounts/balances, show the balance on the booking confirm step | M | Balance visible before booking |
-| G4 | Booking flow: confirm modal (total, line items, account) → charge → receipt panel → trip status `booked` | M | Demoable end to end |
-| G5 | Payments history page (`/app/payments`, endpoint already exists) | S | |
-| G6 | Webhook/status poll if the sandbox settles asynchronously | M | `pending` → `settled` updates |
-
 ### H. QA, demo, submission (owner: ____)
 
 | # | Task | Size | Done when |
@@ -208,12 +194,11 @@ what does not. The "no-input" column is being worked by Claude in this session; 
 
 | Order | Task | Who | Minutes |
 |---|---|---|---|
-| 1 | **Sponsor tables**: Akamai inference endpoint + key; Jack Henry sandbox URL, auth, "create payment" docs (B1, G1) | ____ | 30 |
+| 1 | **Sponsor tables**: Akamai inference endpoint + key (B1) | ____ | 30 |
 | 2 | **Keys**: SerpApi, Mapbox, Google Places (New), EIA. Store securely and configure `.env` (C1, C3, C4, C5) | ____ | 30 |
 | 3 | **Linode**: create Ubuntu 24.04 2 GB instance, `apt install docker.io docker-compose-v2 git`, clone repo, copy `.env` (A2) | ____ | 30 |
 | 4 | First deploy: `docker compose --profile prod up -d --build` on the Linode, open `http://<ip>` (A3) | same | 20 |
 | 5 | Run `.\scripts\dev-db.ps1` (Windows) or `docker compose up -d db` locally so you can test accounts (A1) | everyone | 10 |
-| 6 | Once G1 docs are in hand: adapt `payments/jackhenry.go` with Claude (G2), test a charge (G4) | ____ | 60 |
 | 7 | Rehearse the demo twice (H3), record the video, submit (H5) | all | 90 |
 
 ### No outside input needed (in progress now)
@@ -247,8 +232,7 @@ F5 share link, G6 webhooks, E2–E4 profile/vehicle/edit. Revisit only if everyt
 3. **AI on Akamai**: scroll the itinerary, call out `✦ itinerary by AI on Akamai`, that the model only arranged real prices.
 4. **Map**: route line with rest stops and the hotel pin.
 5. **Account**: sign up, save the trip, show it on the dashboard.
-6. **Book with Jack Henry**: confirm modal → charge in the sandbox → receipt → trip marked `booked`.
-7. **Close**: one Linode, one container, model on Akamai; flights and hotels use real provider results or explicit errors, while other providers retain fallbacks.
+6. **Close**: one Linode, one container, model on Akamai; flights and hotels use real provider results or explicit errors, while other providers retain fallbacks.
 
 Target: under 4 minutes.
 
@@ -258,7 +242,6 @@ Target: under 4 minutes.
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| Jack Henry sandbox is not a simple REST "pay" call | High | G1 first thing; mock mode already demoable; show the sandbox call in a terminal if the UI path is blocked |
 | Akamai inference endpoint not OpenAI-compatible | Medium | `ai.Client` is 150 lines; adapt request/response shapes; Ollama on a GPU Linode as backup |
 | SerpApi quotas or missing priced routes | Medium | Use supported airports, retain provider caching, and show explicit errors; never substitute mock flight or hotel prices |
 | Model returns bad JSON | High | B3 repair pass, B4 validation, fallback itinerary |

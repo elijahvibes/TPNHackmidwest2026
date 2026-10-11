@@ -6,7 +6,7 @@ import Hero from '../components/Hero'
 import Icon, { WeatherIcon } from '../components/Icon'
 import { PlacePicture } from '../components/TripGlance'
 
-const statusStyle: Record<Trip['status'], string> = { draft: 'text-muted', planned: 'text-cyan border-cyan/40', booked: 'text-accent border-accent/50 bg-accent-soft' }
+const statusStyle: Record<Trip['status'], string> = { draft: 'text-muted', planned: 'text-cyan border-cyan/40' }
 
 const nightsOf = (t: Trip) => Math.max(0, Math.round((Date.parse(t.end_date) - Date.parse(t.start_date)) / 86400000))
 const daysUntil = (iso: string) => Math.ceil((Date.parse(iso) - Date.now()) / 86400000)
