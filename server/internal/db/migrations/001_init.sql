@@ -31,25 +31,10 @@ CREATE TABLE IF NOT EXISTS trips (
     travelers   INT           NOT NULL DEFAULT 1,
     budget_usd  DECIMAL(10,2) NULL,
     mode        VARCHAR(16)   NOT NULL DEFAULT 'auto',   -- auto | drive | fly
-    status      VARCHAR(16)   NOT NULL DEFAULT 'draft',  -- draft | planned | booked
+    status      VARCHAR(16)   NOT NULL DEFAULT 'draft',  -- draft | planned
     plan        JSON          NULL,                       -- full itinerary + pricing from the planner
     created_at  DATETIME(6)   NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at  DATETIME(6)   NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     INDEX trips_user_idx (user_id, created_at),
     CONSTRAINT trips_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS payments (
-    id           CHAR(36)      NOT NULL PRIMARY KEY,
-    user_id      CHAR(36)      NOT NULL,
-    trip_id      CHAR(36)      NULL,
-    provider     VARCHAR(32)   NOT NULL DEFAULT 'jackhenry',
-    provider_ref VARCHAR(128)  NULL,
-    amount_usd   DECIMAL(10,2) NOT NULL,
-    status       VARCHAR(16)   NOT NULL DEFAULT 'pending', -- pending | settled | failed
-    memo         VARCHAR(255)  NULL,
-    created_at   DATETIME(6)   NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    INDEX payments_user_idx (user_id, created_at),
-    CONSTRAINT payments_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT payments_trip_fk FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

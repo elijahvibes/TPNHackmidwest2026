@@ -106,13 +106,9 @@ export type Plan = {
 export type Trip = {
   id: string; title: string; origin: string; destination: string
   start_date: string; end_date: string; travelers: number; budget_usd: number | null
-  mode: string; status: 'draft' | 'planned' | 'booked'; plan?: Plan; created_at: string
+  mode: string; status: 'draft' | 'planned'; plan?: Plan; created_at: string
 }
 
-export type Payment = {
-  id: string; trip_id: string | null; provider: string; provider_ref: string | null
-  amount_usd: number; status: string; memo: string | null; created_at: string
-}
 
 export type PlanRequest = {
   origin: string; destination: string; start_date: string; end_date: string
@@ -152,7 +148,7 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
 }
 
 export const api = {
-  health: () => request<{ ok: boolean; db: boolean; ai: boolean; serpapi: boolean; payments: boolean }>('GET', '/health'),
+  health: () => request<{ ok: boolean; db: boolean; ai: boolean; serpapi: boolean }>('GET', '/health'),
 
   register: (email: string, name: string, password: string) =>
     request<{ token: string; user: User }>('POST', '/auth/register', { email, name, password }),
@@ -195,9 +191,6 @@ export const api = {
   chooseHotel: (id: string, name: string) =>
     request<Plan>('POST', `/trips/${id}/hotel`, { name }),
 
-  payments: () => request<Payment[]>('GET', '/payments'),
-  pay: (trip_id: string, amount_usd: number, memo: string) =>
-    request<{ payment: Payment; mock: boolean }>('POST', '/payments', { trip_id, amount_usd, memo }),
 }
 
 export const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })

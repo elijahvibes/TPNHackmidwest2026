@@ -2,7 +2,7 @@
 
 TPN is an AI vacation planner that prices the whole trip (flights, gas for *your* car, hotels, things to do,
 stops along the way) and picks the best value. Go backend, TypeScript/React frontend, MySQL,
-AI inference and hosting on Akamai, payments through Jack Henry.
+AI inference and hosting on Akamai.
 
 ```
 web/      Vite + React + TypeScript + Tailwind (the UI)
@@ -65,7 +65,6 @@ Open http://localhost:5173. Vite proxies `/api` to the Go server on :8080.
 | GET/DELETE | `/api/trips/{id}` | yes | one trip |
 | POST | `/api/trips/{id}/plan` | yes | run the planner, store the itinerary; body may carry `mode`, `origin_loc`, `dest_loc`, `vehicle_mpg`, `interests` |
 | POST | `/api/trips/{id}/hotel` | yes | `{"name"}` swaps the stay and re-totals the stored plan |
-| GET/POST | `/api/payments` | yes | Jack Henry charge; marks the trip `booked` |
 
 ## How the planner works (`server/internal/planner`)
 
@@ -90,9 +89,6 @@ Plan pages no longer show the red mock-data warning, the estimates note, or the
 the plan header has a "live data sources" toggle that lists each source tag, and
 place prices marked ~ are typical-price estimates rather than provider data.
 Existing fallbacks remain enabled.
-
-Payment screens also warn about configured mock mode and persisted `JH-MOCK-`
-receipts. Mock settlement does not move money or reserve travel.
 
 Warning detection tests: `node --test web/tests/dataWarnings.test.mjs` (Node 22.18+).
 
@@ -217,8 +213,8 @@ Booking options are fetched only after return selection. They include seller lin
 fare conditions and baggage information when provided. Google booking actions
 requiring POST are resolved server-side using the opaque provider payload.
 Separate-ticket options are labeled. Following a seller link does not buy a ticket;
-complete and confirm the booking on the seller's site. Jack Henry payment alone
-does not reserve airline tickets.
+complete and confirm the booking on the seller's site. TPN itself never
+reserves airline tickets.
 
 Endpoints: `POST /api/flights/returns`, `/api/flights/bookings`,
 `/api/plan/flight` (preview selection), and `/api/trips/{id}/flight`
@@ -258,9 +254,6 @@ Redeploys from a laptop: `scripts/ship.sh` (the repo is private, so it uploads t
 **AI on Akamai**: set `AI_BASE_URL` to your Akamai Inference Cloud endpoint (OpenAI-compatible, ends in `/v1`)
 plus `AI_API_KEY` and `AI_MODEL`. Alternative: a Linode GPU instance running `ollama serve` with
 `AI_BASE_URL=http://<gpu-ip>:11434/v1` and `AI_MODEL=llama3.1`.
-
-**Jack Henry**: `server/internal/payments/jackhenry.go` posts to `${JACKHENRY_BASE_URL}/payments`.
-This is a generic placeholder, not a verified Jack Henry API contract. Without configuration, payments settle in mock mode.
 
 ## Where to get keys (all free)
 

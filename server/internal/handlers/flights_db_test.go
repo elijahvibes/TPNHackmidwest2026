@@ -112,10 +112,4 @@ func TestSavedFlightSelectionPersistsAndChecksOwnership(t *testing.T) {
 	if out.LocalTransport != "rental_car" || out.ActivityRadiusMiles != 50 {
 		t.Fatalf("saved flight selection lost mobility preferences: %+v", out)
 	}
-	if _, err := pool.ExecContext(ctx, "UPDATE trips SET status='booked' WHERE id=?", tripID); err != nil {
-		t.Fatal(err)
-	}
-	if w := request(userID, `{"flight_index":0}`); w.Code != 409 {
-		t.Fatalf("booked trip protection = %d", w.Code)
-	}
 }

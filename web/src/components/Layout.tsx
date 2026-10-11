@@ -17,7 +17,6 @@ export default function Layout() {
               <>
                 <NavLink to="/app/new" className={link}>Plan a trip</NavLink>
                 <NavLink to="/app" end className={link}>My trips</NavLink>
-                <NavLink to="/app/payments" className={link}>Payments</NavLink>
                 <NavLink to="/app/profile" title={user.name}
                   className={({ isActive }) => `w-8 h-8 rounded-full bg-panel border text-[12px] font-medium flex items-center justify-center transition-colors ${isActive ? 'border-ink text-ink' : 'border-line text-muted hover:border-ink hover:text-ink'}`}>
                   {initials(user.name)}
@@ -40,7 +39,7 @@ export default function Layout() {
       <footer className="border-t border-line">
         <div className="max-w-6xl mx-auto px-5 py-5 text-[12px] text-dim flex flex-wrap gap-x-6 gap-y-1">
           <span>TPN · HackMidwest 2026</span>
-          <span>Hosted on Akamai · AI on Akamai · Payments by Jack Henry</span>
+          <span>Hosted on Akamai · AI on Akamai</span>
         </div>
       </footer>
     </div>

@@ -29,10 +29,6 @@ type Config struct {
 	GeoapifyKey string
 	MapboxToken string
 
-	// Payments
-	JackHenryBaseURL string
-	JackHenryKey     string
-
 	MockMode bool
 }
 
@@ -87,8 +83,6 @@ func Load() Config {
 		PlacesKey:        env("GOOGLE_PLACES_KEY", ""),
 		GeoapifyKey:      env("GEOAPIFY_KEY", ""),
 		MapboxToken:      env("MAPBOX_TOKEN", ""),
-		JackHenryBaseURL: env("JACKHENRY_BASE_URL", ""),
-		JackHenryKey:     env("JACKHENRY_KEY", ""),
 	}
 	c.MockMode, _ = strconv.ParseBool(env("MOCK_MODE", "false"))
 	if c.JWTSecret == "" {

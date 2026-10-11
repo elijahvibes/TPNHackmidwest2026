@@ -55,13 +55,6 @@ curl -sf "$BASE/api/trips" -H "$AUTH" | j "length" >/dev/null || fail list
 STATUS=$(curl -sf "$BASE/api/trips/$TRIP" -H "$AUTH" | j status)
 [ "$STATUS" = "planned" ] || fail "status=$STATUS want planned"
 
-echo "== pay"
-curl -sf -X POST "$BASE/api/payments" -H "$AUTH" -H 'Content-Type: application/json' \
-  -d "{\"trip_id\":\"$TRIP\",\"amount_usd\":812.5,\"memo\":\"smoke\"}" | j payment.status >/dev/null || fail pay
-STATUS=$(curl -sf "$BASE/api/trips/$TRIP" -H "$AUTH" | j status)
-[ "$STATUS" = "booked" ] || fail "status=$STATUS want booked"
-curl -sf "$BASE/api/payments" -H "$AUTH" | j "length" >/dev/null || fail list-payments
-
 echo "== delete trip"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/trips/$TRIP" -H "$AUTH")
 [ "$code" = "204" ] || fail "delete code=$code"

@@ -8,7 +8,6 @@ import (
 
 	"trailmix/internal/auth"
 	"trailmix/internal/httpx"
-	"trailmix/internal/payments"
 	"trailmix/internal/planner"
 	"trailmix/internal/travel"
 )
@@ -19,7 +18,6 @@ type Deps struct {
 	Auth     *auth.Service
 	Planner  *planner.Planner
 	Fuel     *travel.Fuel
-	Payments *payments.Client
 }
 
 // requireDB returns 503 for routes that need Postgres when it is unavailable.
@@ -41,7 +39,6 @@ func Mount(r chi.Router, d *Deps) {
 			"db":       d.DB != nil,
 			"ai":       d.Planner.AI.Enabled(),
 			"serpapi":  d.Planner.SerpAPI.Enabled(),
-			"payments": d.Payments.Live(),
 		})
 	})
 
@@ -76,8 +73,5 @@ func Mount(r chi.Router, d *Deps) {
 		r.Post("/trips/{id}/plan/start", d.startTripPlan) // background job; saves on completion
 		r.Post("/trips/{id}/hotel", d.chooseHotel)        // swap the stay, re-total the plan
 		r.Post("/trips/{id}/flight", d.selectTripFlight)
-
-		r.Get("/payments", d.listPayments)
-		r.Post("/payments", d.createPayment)
 	})
 }

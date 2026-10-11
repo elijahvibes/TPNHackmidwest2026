@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { api, usd, type Trip } from '../lib/api'
+import { api, type Trip } from '../lib/api'
 import { usePlanJob } from '../lib/usePlanJob'
 import PlanView from '../components/PlanView'
 import PlanProgress from '../components/PlanProgress'
-import DataWarning from '../components/DataWarning'
 import Icon from '../components/Icon'
 
 export default function TripView() {
@@ -13,15 +12,10 @@ export default function TripView() {
   const [trip, setTrip] = useState<Trip | null>(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState('')
-  const [receipt, setReceipt] = useState<{ ref: string | null; mock: boolean } | null>(null)
   const [copied, setCopied] = useState(false)
-  const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null)
 
   const load = useCallback(() => api.trip(id).then(setTrip).catch(e => setErr((e as Error).message)), [id])
   useEffect(() => { load() }, [load])
-  useEffect(() => {
-    api.health().then(h => setPaymentsLive(h.payments)).catch(e => setErr((e as Error).message))
-  }, [])
 
   // Planning is a background job (?job=…): the draft shows within seconds and
   // the AI agents' progress streams in; on completion the saved trip reloads.
@@ -45,16 +39,6 @@ export default function TripView() {
       const plan = await api.chooseHotel(id, name)
       setTrip(t => t ? { ...t, plan } : t)
     } catch (e) { setErr((e as Error).message) }
-  }
-
-  const book = async () => {
-    if (!trip?.plan) return
-    setBusy('Charging via Jack Henry'); setErr('')
-    try {
-      const r = await api.pay(trip.id, trip.plan.total_usd, `TPN: ${trip.title}`)
-      setReceipt({ ref: r.payment.provider_ref, mock: r.mock })
-      await load()
-    } catch (e) { setErr((e as Error).message) } finally { setBusy('') }
   }
 
   const share = async () => {
@@ -82,9 +66,6 @@ export default function TripView() {
     <>
       {trip.plan && <button className="btn-ghost !py-1.5" onClick={share}><Icon name="share" size={14} />{copied ? 'Copied' : 'Share'}</button>}
       <button className="btn-ghost !py-1.5" onClick={() => replan()} disabled={locked}>{trip.plan ? 'Re-plan' : 'Plan'}</button>
-      {trip.plan && trip.status !== 'booked' && (
-        <button className="btn-primary !py-1.5" onClick={book} disabled={locked}>Book · {usd(trip.plan.total_usd)}</button>
-      )}
     </>
   )
 
@@ -96,20 +77,9 @@ export default function TripView() {
       </div>
       {planning && <PlanProgress active events={job.events} stage={job.job?.stage} compact={!!job.plan} />}
       {err && <div className="text-sm text-rose">{err}</div>}
-      <DataWarning details={receipt?.mock
-        ? ['Payment: simulated settlement. No money moved, and no flight or hotel was reserved.']
-        : paymentsLive === false && trip.status !== 'booked'
-          ? ['Payments: mock mode is on. The book button simulates a payment. It moves no money and reserves no travel.']
-          : []} />
-      {receipt && (
-        <div className="panel p-4 border-accent/60 bg-accent-soft/50 text-sm">
-          <span className="text-accent font-medium">Payment settled</span> · ref {receipt.ref}
-          {receipt.mock && <span className="text-rose font-semibold"> · simulated payment, no real charge</span>}
-        </div>
-      )}
       {shownPlan ? (
         <PlanView plan={shownPlan} actions={actions} busy={locked} refining={planning} onChooseHotel={planning ? undefined : chooseHotel} onReplan={m => replan(m)}
-          onSelectFlight={planning ? undefined : selectFlight} disabled={locked || trip.status === 'booked'}
+          onSelectFlight={planning ? undefined : selectFlight} disabled={locked}
           meta={{ travelers: trip.travelers, budget_usd: trip.budget_usd, status: trip.status }} />
       ) : (
         <div className="panel p-10 text-center grid gap-3 justify-items-center">

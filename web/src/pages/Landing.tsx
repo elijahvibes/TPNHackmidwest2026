@@ -56,7 +56,7 @@ export default function Landing() {
           <PlanView plan={plan} meta={{ travelers: req?.travelers, budget_usd: req?.budget_usd ?? null }} refining={job.running}
             onSelectFlight={job.running ? undefined : selectFlight} disabled={busy || selecting}
             onChooseHotel={job.running ? undefined : name => setPlan(p => p ? chooseHotelLocally(p, name) : p)} />
-          {!user && <div className="panel p-5 text-sm text-muted">Like it? <Link to="/register" className="text-accent underline underline-offset-2">Create an account</Link> to save trips, swap stays for good, and book with Jack Henry.</div>}
+          {!user && <div className="panel p-5 text-sm text-muted">Like it? <Link to="/register" className="text-accent underline underline-offset-2">Create an account</Link> to save trips and swap stays for good.</div>}
           {user && <div className="panel p-5 text-sm text-muted">Save this as a trip from <Link to="/app/new" className="text-accent underline underline-offset-2">Plan a trip</Link>.</div>}
         </div>
       )}

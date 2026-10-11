@@ -18,7 +18,6 @@ import (
 	"trailmix/internal/config"
 	"trailmix/internal/db"
 	"trailmix/internal/handlers"
-	"trailmix/internal/payments"
 	"trailmix/internal/planner"
 	"trailmix/internal/travel"
 )
@@ -52,7 +51,6 @@ func main() {
 			Weather: travel.NewNWS(),
 			Wiki:    travel.NewWiki(),
 		},
-		Payments: payments.NewJackHenry(cfg.JackHenryBaseURL, cfg.JackHenryKey),
 	}
 
 	r := chi.NewRouter()
@@ -75,8 +73,8 @@ func main() {
 	if !deps.Planner.SerpAPI.Enabled() {
 		log.Println("WARN: SERPAPI_KEY not set; trip planning is unavailable")
 	}
-	log.Printf("TPN api listening on :%s (ai=%v serpapi=%v payments=%v static=%q)",
-		cfg.Port, deps.Planner.AI.Enabled(), deps.Planner.SerpAPI.Enabled(), deps.Payments.Live(), cfg.StaticDir)
+	log.Printf("TPN api listening on :%s (ai=%v serpapi=%v static=%q)",
+		cfg.Port, deps.Planner.AI.Enabled(), deps.Planner.SerpAPI.Enabled(), cfg.StaticDir)
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r, ReadHeaderTimeout: 10 * time.Second}
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isMockPayment, planDataWarnings, planEstimates, planRealData } from '../src/lib/dataWarnings.ts'
+import { planDataWarnings, planEstimates, planRealData } from '../src/lib/dataWarnings.ts'
 
 function livePlan() {
   return {
@@ -88,11 +88,6 @@ test('old plans without weather or safety still detect summary-only mock sources
   assert.ok(planDataWarnings(plan).some(w => w.startsWith('Safety:')))
 })
 
-test('saved mock payments remain identifiable after live mode is enabled', () => {
-  assert.equal(isMockPayment('JH-MOCK-ab12'), true)
-  assert.equal(isMockPayment('real-payment-id'), false)
-  assert.equal(isMockPayment(null), false)
-})
 
 test('real-data disclosure identifies actual provider results and excludes empty weather', () => {
   const plan = livePlan()

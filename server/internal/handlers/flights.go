@@ -92,10 +92,6 @@ func (d *Deps) selectTripFlight(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 500, "could not load trip for flight selection")
 		return
 	}
-	if t.Status == "booked" {
-		httpx.Error(w, 409, "booked trips cannot change flights")
-		return
-	}
 	var plan planner.Plan
 	if len(t.Plan) == 0 || json.Unmarshal(t.Plan, &plan) != nil {
 		httpx.Error(w, 400, "re-plan this trip before selecting a flight")
