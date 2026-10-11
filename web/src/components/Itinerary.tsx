@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { fmtDate, usd, type Day, type DayItem, type ItemCategory, type Plan } from '../lib/api'
+import { fmtDate, fmtTime, usd, type Day, type DayItem, type ItemCategory, type Plan } from '../lib/api'
 import { itineraryMapLink } from '../lib/placeLinks'
 import { roadStops, showTransportItem } from '../lib/transport'
 
@@ -103,8 +103,8 @@ export default function Itinerary({ plan }: { plan: Plan }) {
 function Item({ it, last, mapLink, unknownPlaceCosts }: { it: DayItem; last: boolean; mapLink: string | undefined; unknownPlaceCosts: boolean }) {
   const c = CAT[it.category] ?? CAT.activity
   return (
-    <li className="grid grid-cols-[44px_20px_1fr_auto] gap-x-3 relative">
-      <span className="mono text-[11px] text-dim pt-3 tabular-nums">{it.time === '--:--' ? '' : it.time}</span>
+    <li className="grid grid-cols-[60px_20px_1fr_auto] gap-x-3 relative">
+      <span className="mono text-[11px] text-dim pt-3 tabular-nums whitespace-nowrap">{it.time === '--:--' ? '' : fmtTime(it.time)}</span>
       <span className="relative flex justify-center pt-3">
         {!last && <span className="absolute top-7 bottom-0 w-px bg-line" aria-hidden />}
         <span className="relative z-[1] w-5 h-5 rounded-full border bg-bg flex items-center justify-center text-[10px] leading-none"

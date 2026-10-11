@@ -44,6 +44,9 @@ export type HotelQuote = {
 export type DriveEstimate = {
   distance_miles: number; duration_min: number; gallons_needed: number; gas_price_usd: number
   fuel_cost_usd: number; round_trip_usd: number; vehicle_mpg: number; source: string
+  /** fuel bought a tank at a time: fill before leaving, then refuels on the road (per direction) */
+  tank_gallons?: number; range_miles?: number; start_tank_usd?: number
+  refuels?: { at_mile: number; gallons: number; cost_usd: number }[]
 }
 export type Place = {
   name: string; category: string; categories?: string[]; rating: number; price_usd: number; price_unknown?: boolean
@@ -109,12 +112,12 @@ export type Payment = {
 
 export type PlanRequest = {
   origin: string; destination: string; start_date: string; end_date: string
-  travelers: number; budget_usd?: number; mode?: string; vehicle_mpg?: number
+  travelers: number; budget_usd?: number; mode?: string; vehicle_mpg?: number; tank_gallons?: number
   interests?: string[]; origin_loc?: LatLng; dest_loc?: LatLng
   local_transport?: 'auto' | 'rental_car' | 'transit_rideshare' | 'walking'; activity_radius_miles?: number
 }
 
-export type PlanExtra = Pick<PlanRequest, 'vehicle_mpg' | 'interests' | 'mode' | 'origin_loc' | 'dest_loc' | 'local_transport' | 'activity_radius_miles'>
+export type PlanExtra = Pick<PlanRequest, 'vehicle_mpg' | 'tank_gallons' | 'interests' | 'mode' | 'origin_loc' | 'dest_loc' | 'local_transport' | 'activity_radius_miles'>
 
 const TOKEN_KEY = 'tpn.token'
 export const token = {
@@ -180,7 +183,7 @@ export const api = {
 
   trips: () => request<Trip[]>('GET', '/trips'),
   trip: (id: string) => request<Trip>('GET', `/trips/${id}`),
-  createTrip: (t: Omit<PlanRequest, 'origin_loc' | 'dest_loc' | 'vehicle_mpg' | 'interests'> & { title?: string }) =>
+  createTrip: (t: Omit<PlanRequest, 'origin_loc' | 'dest_loc' | 'vehicle_mpg' | 'tank_gallons' | 'interests'> & { title?: string }) =>
     request<Trip>('POST', '/trips', t),
   deleteTrip: (id: string) => request<void>('DELETE', `/trips/${id}`),
   planTrip: (id: string, extra?: PlanExtra) =>
@@ -197,6 +200,16 @@ export const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency',
 export const hrs = (min: number) => `${Math.floor(min / 60)}h ${min % 60}m`
 
 /** "2026-11-06" → "Fri, Nov 6" (no timezone surprises: parse as local date). */
+/** "18:30" → "6:30 PM"; untimed items ("--:--") and anything unparsable come back unchanged. */
+export const fmtTime = (hhmm: string) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm)
+  if (!m) return hhmm
+  const h = Number(m[1]), min = m[2]
+  if (h > 23) return hhmm
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${min} ${h < 12 ? 'AM' : 'PM'}`
+}
+
 export const fmtDate = (iso: string, opts: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' }) => {
   const [y, m, d] = iso.split('-').map(Number)
   if (!y || !m || !d) return iso

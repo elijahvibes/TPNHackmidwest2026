@@ -27,6 +27,7 @@ func NewGeoapify(key string) *Geoapify {
 var geoapifyCategories = map[string]string{
 	"attraction": "tourism.sights,entertainment.museum,leisure.park",
 	"food":       "catering.restaurant",
+	"breakfast":  "catering.cafe,commercial.food_and_drink.bakery",
 	"rest_stop":  "service.vehicle.fuel",
 	"outdoors":   "leisure.park,natural",
 	"museums":    "entertainment.museum",

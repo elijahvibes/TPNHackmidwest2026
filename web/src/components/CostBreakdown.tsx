@@ -55,9 +55,15 @@ export default function CostBreakdown({ plan, budget, onReplan, busy }: {
 
 function OptionRow({ o, best, plan, onReplan, busy }: { o: PlanOption; best: boolean; plan: Plan; onReplan?: (m: string) => void; busy?: boolean }) {
   const f = plan.flights[0]
+  const d = plan.drive
+  const refuels = d.refuels?.length ?? 0
   const detail = o.mode === 'drive'
-    ? `${Math.round(plan.drive.distance_miles)} mi · ${hrs(plan.drive.duration_min)} each way · ${plan.drive.gallons_needed} gal @ $${plan.drive.gas_price_usd.toFixed(2)} (${plan.drive.vehicle_mpg} mpg)`
+    ? `${Math.round(d.distance_miles)} mi · ${hrs(d.duration_min)} each way · ${d.gallons_needed} gal @ $${d.gas_price_usd.toFixed(2)} (${d.vehicle_mpg} mpg)`
     : f ? `${f.carrier} ${f.origin}→${f.destination} · ${f.stops ? `${f.stops} stop` : 'nonstop'} · ${hrs(f.duration_min)} · ${usd(f.price_usd)}/person` : ''
+  const fuel = o.mode === 'drive' && d.start_tank_usd !== undefined
+    ? `per direction: full tank ${usd(d.start_tank_usd)} (${d.tank_gallons} gal, ~${Math.round(d.range_miles ?? 0)} mi)` +
+      (refuels ? ` + ${refuels} refuel${refuels > 1 ? 's' : ''} at ${usd(d.refuels![0].cost_usd)}${refuels > 1 && d.refuels![refuels - 1].cost_usd !== d.refuels![0].cost_usd ? ` and ${usd(d.refuels![refuels - 1].cost_usd)}` : ''}` : ', no refuel needed')
+    : ''
   return (
     <div className={`rounded-md border px-3 py-2 ${best ? 'border-accent/70 bg-accent/5' : 'border-line'}`}>
       <div className="flex items-center justify-between gap-2">
@@ -65,6 +71,7 @@ function OptionRow({ o, best, plan, onReplan, busy }: { o: PlanOption; best: boo
         <div className="mono text-sm text-ink tabular-nums">{usd(o.total_usd)}</div>
       </div>
       <div className="mono text-[11px] text-muted mt-1">{detail}</div>
+      {fuel && <div className="mono text-[11px] text-amber mt-0.5">⛽ {fuel}</div>}
       <div className="mono text-[11px] text-dim mt-1 flex flex-wrap gap-x-3">
         <span>{o.travel_hours}h round trip</span>
         <span>value {o.value_score}</span>

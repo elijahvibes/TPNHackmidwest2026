@@ -208,14 +208,25 @@ func (f *Fuel) VehicleMPG(ctx context.Context, year int, make, model string) (fl
 	return mpg, nil
 }
 
-func (f *Fuel) Drive(ctx context.Context, miles float64, minutes int, mpg float64) DriveEstimate {
+// DefaultTankGallons is a mid-size car; the form lets the traveler change it.
+const DefaultTankGallons = 14.0
+
+// Drive prices one direction of driving a tank at a time: a full tank before
+// leaving, then a refuel every ~85% of the range (nobody runs it to empty),
+// with the last stop taking only what the remaining miles need. The total
+// still equals gallons × price; the split is what the itinerary shows and
+// where the road stops go.
+func (f *Fuel) Drive(ctx context.Context, miles float64, minutes int, mpg, tank float64) DriveEstimate {
 	if mpg <= 0 {
 		mpg = 28 // typical sedan
+	}
+	if tank <= 0 {
+		tank = DefaultTankGallons
 	}
 	price, src := f.GasPrice(ctx)
 	gallons := miles / mpg
 	cost := gallons * price
-	return DriveEstimate{
+	d := DriveEstimate{
 		DistanceMiles: round1(miles),
 		DurationMin:   minutes,
 		GallonsNeeded: round1(gallons),
@@ -224,7 +235,24 @@ func (f *Fuel) Drive(ctx context.Context, miles float64, minutes int, mpg float6
 		RoundTripUSD:  round2(cost * 2),
 		VehicleMPG:    mpg,
 		Source:        src,
+		TankGallons:   tank,
+		RangeMiles:    round1(tank * mpg),
 	}
+	usable := tank * mpg * 0.85 // miles between fills
+	if miles <= usable {
+		d.StartTankUSD = round2(cost) // one tank covers it
+		return d
+	}
+	d.StartTankUSD = round2(usable / mpg * price)
+	remaining := miles - usable
+	at := usable
+	for remaining > 0 && len(d.Refuels) < 8 {
+		leg := min(usable, remaining)
+		d.Refuels = append(d.Refuels, Refuel{AtMile: round1(at), Gallons: round1(leg / mpg), CostUSD: round2(leg / mpg * price)})
+		at += leg
+		remaining -= leg
+	}
+	return d
 }
 
 func round1(v float64) float64 { return float64(int(v*10+0.5)) / 10 }

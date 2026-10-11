@@ -31,11 +31,11 @@ func TestOutdoorFoodDoesNotAddGenericSightseeing(t *testing.T) {
 				continue
 			}
 			if seen[item.Title] {
-				t.Fatalf("dinner repeated: %s", item.Title)
+				t.Fatalf("meal repeated: %s", item.Title)
 			}
 			seen[item.Title] = true
-			if !strings.Contains(item.Detail, "dinner hours and availability unverified") {
-				t.Fatalf("dinner hours asserted: %+v", item)
+			if !strings.Contains(item.Detail, "hours and availability unverified") {
+				t.Fatalf("meal hours asserted: %+v", item)
 			}
 		}
 	}

@@ -41,3 +41,12 @@ test('driving disclosures do not suggest renting another car', () => {
   assert.ok(!planEstimates(plan).some(w => w.includes('rental')))
   assert.deepEqual(planDataWarnings(plan), [])
 })
+
+test('times render on a 12-hour clock', async () => {
+  const { fmtTime } = await import('../src/lib/api.ts')
+  assert.equal(fmtTime('18:30'), '6:30 PM')
+  assert.equal(fmtTime('08:05'), '8:05 AM')
+  assert.equal(fmtTime('00:15'), '12:15 AM')
+  assert.equal(fmtTime('12:00'), '12:00 PM')
+  assert.equal(fmtTime('--:--'), '--:--')
+})

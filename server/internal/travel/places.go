@@ -105,6 +105,7 @@ func (p *Places) Explore(ctx context.Context, at LatLng, kind string, limit int,
 var googleTypes = map[string][]string{
 	"attraction": {"tourist_attraction", "museum", "park"},
 	"food":       {"restaurant"},
+	"breakfast":  {"cafe", "bakery", "breakfast_restaurant"},
 	"rest_stop":  {"gas_station", "rest_stop"},
 	// interest-driven kinds (from the trip form)
 	"outdoors":  {"park", "hiking_area", "national_park", "campground"},
@@ -198,6 +199,11 @@ func mockPlaces(at LatLng, kind string, limit int) []Place {
 			{Name: "Corner Taqueria", Rating: 4.6, PriceUSD: 13},
 			{Name: "Farm Table Bistro", Rating: 4.5, PriceUSD: 34},
 			{Name: "Early Bird Diner", Rating: 4.4, PriceUSD: 14, Note: "Best breakfast value"},
+		},
+		"breakfast": {
+			{Name: "Sunrise Bakery & Cafe", Rating: 4.6, PriceUSD: 11, Note: "Pastries and coffee"},
+			{Name: "Corner Coffee House", Rating: 4.5, PriceUSD: 9},
+			{Name: "Pancake Parlor", Rating: 4.4, PriceUSD: 14, Note: "Opens at 7"},
 		},
 		"rest_stop": {
 			{Name: "Travel Plaza & Fuel", Rating: 4.1, PriceUSD: 0, Note: "Cheapest gas on this stretch"},

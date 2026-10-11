@@ -153,6 +153,7 @@ func (d *Deps) tripPlanRequest(w http.ResponseWriter, r *http.Request) (t Trip, 
 	}
 	var extra struct {
 		VehicleMPG          float64        `json:"vehicle_mpg"`
+		TankGallons         float64        `json:"tank_gallons"`
 		Interests           []string       `json:"interests"`
 		Mode                string         `json:"mode"`       // re-plan as drive/fly/auto; persisted on the trip
 		OriginLoc           *travel.LatLng `json:"origin_loc"` // pinned points from the form's autocomplete
@@ -187,7 +188,7 @@ func (d *Deps) tripPlanRequest(w http.ResponseWriter, r *http.Request) (t Trip, 
 	}
 	req = planner.Request{
 		Origin: t.Origin, Destination: t.Destination, StartDate: t.StartDate, EndDate: t.EndDate,
-		Travelers: t.Travelers, Mode: t.Mode, VehicleMPG: extra.VehicleMPG, Interests: extra.Interests,
+		Travelers: t.Travelers, Mode: t.Mode, VehicleMPG: extra.VehicleMPG, TankGallons: extra.TankGallons, Interests: extra.Interests,
 		LocalTransport: extra.LocalTransport, ActivityRadiusMiles: extra.ActivityRadiusMiles,
 		OriginLoc: extra.OriginLoc, DestLoc: extra.DestLoc,
 	}
@@ -209,14 +210,20 @@ func (d *Deps) tripPlanRequest(w http.ResponseWriter, r *http.Request) (t Trip, 
 				req.DestLoc = &prev.DestLoc
 			}
 		}
-		if req.VehicleMPG == 0 {
+		if req.VehicleMPG == 0 || req.TankGallons == 0 {
 			var drive struct {
 				Drive struct {
-					VehicleMPG float64 `json:"vehicle_mpg"`
+					VehicleMPG  float64 `json:"vehicle_mpg"`
+					TankGallons float64 `json:"tank_gallons"`
 				} `json:"drive"`
 			}
 			if json.Unmarshal(t.Plan, &drive) == nil {
-				req.VehicleMPG = drive.Drive.VehicleMPG
+				if req.VehicleMPG == 0 {
+					req.VehicleMPG = drive.Drive.VehicleMPG
+				}
+				if req.TankGallons == 0 {
+					req.TankGallons = drive.Drive.TankGallons
+				}
 			}
 		}
 	}
