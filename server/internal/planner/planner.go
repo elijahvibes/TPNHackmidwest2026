@@ -171,7 +171,15 @@ func (p *Planner) review(ctx context.Context, trip agents.Trip, plan *Plan) []ag
 	}
 	audit.Notes = append(audit.Notes, plan.scheduleNotes...)
 	audit.Summary = fmt.Sprintf("checked %d lines against real data: %d removed, %d costs corrected, %d times fixed", len(items), len(drop), len(clamp), len(plan.scheduleNotes))
-	critique := agents.Critique(ctx, p.AI, trip, map[string]any{"summary": plan.Summary, "days": plan.Days, "weather": plan.Weather.Days})
+	// The Reviewer only sees forecast entries for the trip's own dates; the
+	// 7-day outlook for other dates would just mislead it.
+	var tripWeather []travel.DayWeather
+	for _, d := range plan.Days {
+		if w := weatherOn(plan.Weather, d.Date); w != nil {
+			tripWeather = append(tripWeather, *w)
+		}
+	}
+	critique := agents.Critique(ctx, p.AI, trip, map[string]any{"summary": plan.Summary, "days": plan.Days, "forecast_for_trip_days": tripWeather})
 	return []agents.Report{audit, critique}
 }
 
@@ -489,7 +497,7 @@ func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start ti
 			return ta < tb
 		})
 	}
-	plan.scheduleNotes = normalizeSchedule(plan, days)
+	plan.scheduleNotes = append(plan.scheduleNotes, normalizeSchedule(plan, days)...)
 	days = sanitizeDays(days, start, plan.Nights+1)
 	if len(days) == 0 {
 		return fmt.Errorf("ai returned empty plan")
@@ -614,6 +622,10 @@ func (p *Planner) outlineDays(ctx context.Context, req Request, plan *Plan, star
 				}
 			}
 		}
+	}
+	// Rain is handled deterministically, whatever the model did with the forecast.
+	if notes := rainAwareAssign(assign, plan, start); len(notes) > 0 {
+		plan.scheduleNotes = append(plan.scheduleNotes, notes...)
 	}
 	return assign, strings.TrimSpace(out.Summary), nil
 }
