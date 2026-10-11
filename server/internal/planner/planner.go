@@ -176,7 +176,13 @@ func (p *Planner) review(ctx context.Context, trip agents.Trip, plan *Plan) []ag
 	var tripWeather []travel.DayWeather
 	for _, d := range plan.Days {
 		if w := weatherOn(plan.Weather, d.Date); w != nil {
-			tripWeather = append(tripWeather, *w)
+			dw := *w
+			// NWS can label a day "Sunny" with a 57% chance of showers later;
+			// the number is what the plan acts on, so the label follows it.
+			if dw.PrecipPct >= rainyPct && !strings.Contains(strings.ToLower(dw.Short), "rain") && !strings.Contains(strings.ToLower(dw.Short), "shower") {
+				dw.Short = fmt.Sprintf("Showers likely (%d%%), %s early", dw.PrecipPct, strings.ToLower(dw.Short))
+			}
+			tripWeather = append(tripWeather, dw)
 		}
 	}
 	// A compact view (no details or costs) keeps the Reviewer's call short on
