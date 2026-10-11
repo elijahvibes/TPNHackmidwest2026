@@ -46,7 +46,8 @@ export default function Itinerary({ plan }: { plan: Plan }) {
 
   return (
     <section className="grid gap-4" aria-label="itinerary">
-      <div className="sticky top-16 z-[5] -mx-1 px-1 py-2 bg-bg/95 backdrop-blur print:static print:bg-transparent">
+      {/* min-w-0: the chip row scrolls sideways; without it the row's full width becomes the column's minimum and phones get a horizontal scroll. */}
+      <div className="sticky top-16 z-[5] min-w-0 -mx-1 px-1 py-2 bg-bg/95 backdrop-blur print:static print:bg-transparent">
         <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
           <h3 className="text-[19px] shrink-0 mr-2">Itinerary</h3>
           {days.map(d => {

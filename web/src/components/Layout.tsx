@@ -1,3 +1,4 @@
+import { startTransition } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
@@ -22,7 +23,9 @@ export default function Layout() {
                   className={({ isActive }) => `w-8 h-8 rounded-full bg-panel border text-[12px] font-medium flex items-center justify-center transition-colors ${isActive ? 'border-ink text-ink' : 'border-line text-muted hover:border-ink hover:text-ink'}`}>
                   {initials(user.name)}
                 </NavLink>
-                <button className="text-sm text-muted hover:text-ink" onClick={() => { logout(); nav('/') }}>Log out</button>
+                {/* One transition for both: the router navigates inside a transition, so an urgent
+                    user=null on its own would first hit the private route's redirect to /login. */}
+                <button className="text-sm text-muted hover:text-ink" onClick={() => startTransition(() => { logout(); nav('/') })}>Log out</button>
               </>
             ) : (
               <>
