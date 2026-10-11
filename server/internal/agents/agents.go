@@ -296,8 +296,10 @@ func Critique(ctx context.Context, c Chat, trip Trip, itinerary any) Report {
 		rep.Status, rep.Summary = "skipped", "no model configured"
 		return rep
 	}
-	system := `You are the Reviewer agent for a trip planner. Read the itinerary as a skeptical, experienced traveler and list concrete problems only. Reply with JSON only: {"verdict":"good|fixable|poor","issues":[string]} with at most 5 issues, each one sentence naming the day and the item. Look for: outdoor plans on rainy days, two far-apart places scheduled an hour apart, repeated places, a day with nothing to do, safety advice ignored when safety_level is "elevated", and anything that contradicts the weather or the traveler's interests.
-Already guaranteed by the system, so NOT issues: arrival-day items are scheduled after the computed arrival time; dinner is in the evening; last-day items end before the trip home with airport lead time (a quiet morning before a flight is fine); short gaps between check-in and the next item; opening hours and transit availability are unverified by design (the plan says so); prices. Weather: only entries whose date equals a trip day count; the feed covers 7 days, so entries for other dates are a current outlook and must never be used to judge the plan. Rainy trip days (50%+) have already had outdoor places moved indoors by the system; do not re-flag them. Safety advice belongs in the summary and in evening items only; do not demand it on daytime museum visits. Each activity carries its real "setting" (indoor/outdoor) from the place data: trust it over your own assumptions, and only call an outdoor item a rain problem when its day's forecast shows 50%+ rain. Do not report any of those. If nothing else is wrong, verdict is "good" with an empty issues list.`
+	system := `You are the Reviewer agent for a trip planner. Reply with JSON only: {"verdict":"good|fixable|poor","issues":[string]}.
+An issue is a CONTRADICTION between two facts in the data you were given, stated in one sentence that names the day, the item and the data it contradicts. Examples: an "outdoor" item on a trip day whose forecast_for_trip_days entry shows 50%+ rain; the same place scheduled twice; a day with no activity at all; an item timed after the trip-home leg on the last day; a theme that contradicts its items.
+Never report: anything the data does not show (traffic, geography you assume, what a place "might" be like), advice you wish the text included (gear, buffers, safety reminders), opening hours, prices, transit, or the forecast for dates that are not trip days. Trust the "setting" field over your own knowledge. Arrival-day timing, dinner hours and last-day lead times are enforced by the system.
+At most 3 issues. With no contradictions the verdict is "good" and issues is an empty list; "poor" only when a day is unusable.`
 	tripJSON, _ := json.Marshal(trip)
 	itinJSON, _ := json.Marshal(itinerary)
 	var out struct {
@@ -312,7 +314,7 @@ Already guaranteed by the system, so NOT issues: arrival-day items are scheduled
 		return rep
 	}
 	rep.Status = "ok"
-	rep.Notes = clip(out.Issues, 5)
+	rep.Notes = clip(out.Issues, 3)
 	if out.Verdict == "" {
 		out.Verdict = "good"
 	}
