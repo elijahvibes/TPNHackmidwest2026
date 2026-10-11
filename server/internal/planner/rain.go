@@ -132,8 +132,9 @@ func rainAwareAssign(assign []dayAssignment, plan *Plan, start time.Time) []stri
 				notes = append(notes, fmt.Sprintf("day %d (%d%% rain): %s kept, no indoor alternative", i+1, pct, out.Name))
 			}
 		}
-		if changed && !strings.Contains(strings.ToLower(assign[i].Theme), "rain") {
-			assign[i].Theme = fmt.Sprintf("Indoor day, %d%% chance of rain: %s", pct, strings.TrimSpace(assign[i].Theme))
+		if changed {
+			// The model's theme described the old plan ("sunny outdoor exploration").
+			assign[i].Theme = fmt.Sprintf("Indoor day, %d%% chance of rain", pct)
 		}
 	}
 	return notes

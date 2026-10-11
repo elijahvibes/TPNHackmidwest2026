@@ -132,7 +132,7 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 		food = travel.MergeNotable(p.Places.Explore(ctx, dest, "food", 12, req.ActivityRadiusMiles),
 			p.Wiki.Listings(ctx, g.destPlace.Name, dest, req.ActivityRadiusMiles, "food", 8))
 		seen := map[string]bool{}
-		for _, pt := range travel.Interpolate(origin, dest, 2) {
+		for _, pt := range p.Geo.Waypoints(origin, dest, 2) { // on the driven road, not a straight line
 			for _, s := range p.Places.Nearby(ctx, pt, "rest_stop", 4) {
 				if !seen[s.Name] {
 					seen[s.Name] = true

@@ -26,7 +26,7 @@ func TestRainAwareAssignSwapsOutdoorOffRainyDay(t *testing.T) {
 	if len(notes) != 1 || assign[1].Activities[1].Name != "Convergence Station" || assign[2].Activities[0].Name != "Denver Botanic Gardens" {
 		t.Fatalf("garden should swap with Meow Wolf onto the dry day: %v\n%+v", notes, assign)
 	}
-	if assign[1].Theme != "Indoor day, 68% chance of rain: Museum morning, garden afternoon" {
+	if assign[1].Theme != "Indoor day, 68% chance of rain" {
 		t.Errorf("theme: %q", assign[1].Theme)
 	}
 	if assign[2].Theme != "Immersive art and park" {
