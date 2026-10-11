@@ -71,10 +71,19 @@ func TestNormalizeLongDriveHomeLeavesByNoon(t *testing.T) {
 		{Time: "17:30", Title: "Drive back to Kansas City", Category: "transport"},
 	}}}
 	notes := normalizeSchedule(plan, days)
-	// 17:30 would arrive at 04:00; the leg is pulled to noon and the 10:00 visit
-	// (2 h + 45 min lead = 12:45) no longer fits, so it is dropped.
-	if got := times(days[1]); got != "12:00 Drive back to Kansas City" {
+	// 17:30 would arrive at 04:00; the leg is pulled to noon and the visit is
+	// started early enough to still fit (12:00 - 45 min - 2 h = 09:15).
+	if got := times(days[1]); got != "09:15 Colorado State Capitol | 12:00 Drive back to Kansas City" {
 		t.Errorf("day 2: %s (%v)", got, notes)
+	}
+	// A home leg the writer put at 08:00 gets the same treatment.
+	days = []Day{{Day: 1}, {Day: 2, Items: []DayItem{
+		{Time: "10:00", Title: "Colorado State Capitol", Category: "activity"},
+		{Time: "08:00", Title: "Drive back to Kansas City", Category: "transport"},
+	}}}
+	normalizeSchedule(plan, days)
+	if got := times(days[1]); got != "09:15 Colorado State Capitol | 12:00 Drive back to Kansas City" {
+		t.Errorf("early home leg: %s", got)
 	}
 }
 
@@ -94,7 +103,9 @@ func TestNormalizeLastDayBeforeFlightHome(t *testing.T) {
 		{Time: "11:00", Title: "Fly back to MCI", Category: "transport"},
 	}}}
 	normalizeSchedule(plan, days)
-	if got := times(days[1]); got != "11:00 Fly back to MCI" {
-		t.Errorf("late activity should be dropped: %s", got)
+	// 16:00 cannot work before any flight; the park is pulled to 13:00 and the
+	// flight slides to the 18:00 limit rather than losing the stop.
+	if got := times(days[1]); got != "13:00 MacIntosh Park | 18:00 Fly back to MCI" {
+		t.Errorf("late activity should be pulled earlier: %s", got)
 	}
 }

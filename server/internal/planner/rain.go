@@ -137,5 +137,48 @@ func rainAwareAssign(assign []dayAssignment, plan *Plan, start time.Time) []stri
 			assign[i].Theme = fmt.Sprintf("Indoor day, %d%% chance of rain", pct)
 		}
 	}
+	notes = append(notes, topUpDays(assign, plan, start)...)
+	return notes
+}
+
+// topUpDays gives every middle day two activities when unused candidates
+// allow it: indoor ones on rainy days, best-known first, never two of the
+// same type within a mile.
+func topUpDays(assign []dayAssignment, plan *Plan, start time.Time) []string {
+	var notes []string
+	n := len(assign)
+	used := map[string]bool{}
+	for _, a := range assign {
+		for _, p := range a.Activities {
+			used[p.Name] = true
+		}
+	}
+	for i := 1; i < n-1; i++ {
+		if len(assign[i].Activities) >= 2 {
+			continue
+		}
+		rainy := rainPct(plan.Weather, start.AddDate(0, 0, i).Format("2006-01-02")) >= rainyPct
+		for _, cand := range plan.Activities { // plan.Activities is ranked best first
+			if used[cand.Name] || (rainy && isOutdoor(cand)) {
+				continue
+			}
+			ok := true
+			for _, other := range assign[i].Activities {
+				if !differentNearbyActivities(other, cand) {
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+			assign[i].Activities = append(assign[i].Activities, cand)
+			used[cand.Name] = true
+			notes = append(notes, fmt.Sprintf("day %d: added %s (day had one activity)", i+1, cand.Name))
+			if len(assign[i].Activities) >= 2 {
+				break
+			}
+		}
+	}
 	return notes
 }

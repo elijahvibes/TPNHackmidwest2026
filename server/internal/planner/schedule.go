@@ -202,10 +202,17 @@ func normalizeSchedule(plan *Plan, days []Day) []string {
 					// Each timed stop takes about two hours, then the home leg's lead time.
 					need := t + 120 + lead
 					if need > homeAt {
-						if need <= latest {
+						switch {
+						case need <= latest:
 							notes = append(notes, fmt.Sprintf("day %d: trip home moved %s → %s to fit %s", d.Day, fmtHM(homeAt), fmtHM(need), it.Title))
 							homeAt = need
-						} else {
+						case latest-lead-120 >= activityOpen:
+							// Start the stop early enough instead of dropping it.
+							early := latest - lead - 120
+							notes = append(notes, fmt.Sprintf("day %d: %s moved %s → %s and trip home %s → %s", d.Day, it.Title, fmtHM(t), fmtHM(early), fmtHM(homeAt), fmtHM(latest)))
+							it.Time = fmtHM(early)
+							homeAt = latest
+						default:
 							notes = append(notes, fmt.Sprintf("day %d: %s dropped (no time before the trip home)", d.Day, it.Title))
 							continue
 						}

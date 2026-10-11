@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -41,14 +42,22 @@ func TestRainAwareAssignReplacesFromSpareAndLeavesUnknownForecast(t *testing.T) 
 	plan := &Plan{Activities: []travel.Place{park, mint}, Weather: travel.Weather{Days: []travel.DayWeather{{Date: "2026-11-07", PrecipPct: 80}}}}
 	assign := []dayAssignment{{}, {Theme: "Park day", Activities: []travel.Place{park}}, {}}
 	notes := rainAwareAssign(assign, plan, start)
-	if assign[1].Activities[0].Name != "Denver Mint" || len(notes) != 1 {
-		t.Errorf("park should be replaced by the unused Mint: %v %+v", notes, assign[1])
+	if assign[1].Activities[0].Name != "Denver Mint" || len(notes) != 1 || len(assign[1].Activities) != 1 {
+		t.Errorf("park should be replaced by the unused Mint, nothing left to top up with: %v %+v", notes, assign[1])
+	}
+	// With a spare indoor candidate, a one-activity day is topped up.
+	plan.Activities = append(plan.Activities, travel.Place{Name: "Clyfford Still Museum", Categories: []string{"entertainment.museum"}, Location: travel.LatLng{Lat: 39.736, Lng: -104.990}})
+	assign = []dayAssignment{{}, {Activities: []travel.Place{park}}, {}}
+	notes = rainAwareAssign(assign, plan, start)
+	if len(assign[1].Activities) != 2 || assign[1].Activities[1].Name != "Clyfford Still Museum" {
+		t.Errorf("top-up: %v %+v", notes, assign[1])
 	}
 	// No forecast for the trip dates → nothing moves.
 	plan.Weather = travel.Weather{Days: []travel.DayWeather{{Date: "2026-10-11", PrecipPct: 90}}}
 	assign = []dayAssignment{{}, {Activities: []travel.Place{park}}, {}}
-	if notes := rainAwareAssign(assign, plan, start); len(notes) != 0 || assign[1].Activities[0].Name != "Cheesman Park" {
-		t.Errorf("outlook for other dates must not move anything: %v", notes)
+	notes = rainAwareAssign(assign, plan, start)
+	if assign[1].Activities[0].Name != "Cheesman Park" || len(notes) != 1 || !strings.Contains(notes[0], "added") {
+		t.Errorf("outlook for other dates must not move the park (only the top-up applies): %v %+v", notes, assign[1])
 	}
 	if !isOutdoor(park) || isOutdoor(mint) || !isOutdoor(travel.Place{Name: "Red Rocks Park and Amphitheatre"}) {
 		t.Error("isOutdoor")
