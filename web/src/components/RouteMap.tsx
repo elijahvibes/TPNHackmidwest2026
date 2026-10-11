@@ -1,72 +1,93 @@
+import { useEffect, useRef } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import type { LatLng, Plan } from '../lib/api'
 
 type Kind = 'origin' | 'dest' | 'stop' | 'activity' | 'food' | 'hotel' | 'airport'
 type Pin = { at: LatLng; label: string; kind: Kind; sub?: string; quiet?: boolean }
+type Path = { pts: LatLng[]; color: string; width?: number; dash?: string; opacity?: number }
 
+// Leaflet writes these straight into SVG attributes, so they are the theme hexes, not var()s.
 const COLOR: Record<Kind, string> = {
-  origin: 'var(--color-cyan)', dest: 'var(--color-accent)', stop: 'var(--color-muted)',
-  activity: 'var(--color-amber)', food: 'var(--color-amber)', hotel: 'var(--color-rose)', airport: 'var(--color-ink)',
+  origin: '#3e5f7e', dest: '#56674a', stop: '#656a63',
+  activity: '#a3661f', food: '#a3661f', hotel: '#b23a3a', airport: '#1f2420',
+}
+const PANEL = '#ffffff'
+
+// OpenStreetMap's standard tiles: free with attribution and no key. The CSS desaturates
+// them a little so they sit with the paper palette.
+const TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+
+/** Points along a quadratic curve from a to b, bowed sideways by `bend` of its length (0 = straight). */
+function arc(a: LatLng, b: LatLng, bend = 0, n = 32): LatLng[] {
+  if (!bend) return [a, b]
+  const kx = Math.cos((((a.lat + b.lat) / 2) * Math.PI) / 180)
+  const x1 = a.lng * kx, y1 = a.lat, x2 = b.lng * kx, y2 = b.lat
+  const dx = x2 - x1, dy = y2 - y1
+  const cx = (x1 + x2) / 2 - dy * bend, cy = (y1 + y2) / 2 + dx * bend
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const t = i / n, u = 1 - t
+    return { lng: (u * u * x1 + 2 * u * t * cx + t * t * x2) / kx, lat: u * u * y1 + 2 * u * t * cy + t * t * y2 }
+  })
 }
 
-/** Equirectangular projection of a pin set into a W×H box with padding. */
-function projector(pins: Pin[], W: number, H: number, PAD: number, minSpan: number) {
-  const lats = pins.map(p => p.at.lat), lngs = pins.map(p => p.at.lng)
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
-  const midLat = (minLat + maxLat) / 2
-  const kx = Math.cos((midLat * Math.PI) / 180)
-  const spanLng = Math.max((maxLng - minLng) * kx, minSpan), spanLat = Math.max(maxLat - minLat, minSpan)
-  const scale = Math.min((W - 2 * PAD) / spanLng, (H - 2 * PAD) / spanLat)
-  const cx = ((minLng + maxLng) / 2) * kx, cy = midLat
-  return {
-    X: (ll: LatLng) => W / 2 + (ll.lng * kx - cx) * scale,
-    Y: (ll: LatLng) => H / 2 - (ll.lat - cy) * scale,
-  }
-}
+const glyph = (kind: Kind) => kind === 'hotel'
+  ? `<svg viewBox="0 0 16 16" width="16" height="16"><path d="M3 13V7.5L8 3l5 4.5V13z" fill="${COLOR.hotel}" stroke="${PANEL}" stroke-width="1.3"/></svg>`
+  : `<svg viewBox="0 0 16 16" width="16" height="16"><rect x="4" y="4" width="8" height="8" transform="rotate(45 8 8)" fill="${PANEL}" stroke="${COLOR.airport}" stroke-width="1.5"/></svg>`
 
-type Proj = ReturnType<typeof projector> & { arc: (a: LatLng, b: LatLng, bend?: number) => string }
-
-function Sketch({ pins, W, H, minSpan, paths, legend, label }: {
-  pins: Pin[]; W: number; H: number; minSpan: number
-  paths: (p: Proj) => React.ReactNode
-  legend: [Kind, string][]; label: string
+function TileMap({ pins, paths, height, maxZoom, label, legend }: {
+  pins: Pin[]; paths: Path[]; height: number; maxZoom: number; label: string; legend: [Kind, string][]
 }) {
-  const pr = projector(pins, W, H, 48, minSpan)
-  const arc = (a: LatLng, b: LatLng, bend = 0.12) => {
-    const x1 = pr.X(a), y1 = pr.Y(a), x2 = pr.X(b), y2 = pr.Y(b)
-    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
-    const dx = x2 - x1, dy = y2 - y1
-    return `M ${x1.toFixed(1)} ${y1.toFixed(1)} Q ${(mx - dy * bend).toFixed(1)} ${(my + dx * bend).toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`
-  }
+  const ref = useRef<HTMLDivElement>(null)
+  const key = JSON.stringify([pins, paths])
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const map = L.map(el, { zoomControl: false, scrollWheelZoom: false, attributionControl: true })
+    map.attributionControl.setPrefix(false)
+    L.tileLayer(TILES, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map)
+
+    for (const p of paths) {
+      L.polyline(p.pts.map(ll => [ll.lat, ll.lng]), { color: p.color, weight: p.width ?? 2, dashArray: p.dash, opacity: p.opacity ?? 0.9, interactive: false }).addTo(map)
+    }
+    for (const p of pins) {
+      const big = p.kind === 'origin' || p.kind === 'dest'
+      const at: [number, number] = [p.at.lat, p.at.lng]
+      if (big) L.circleMarker(at, { radius: 11, stroke: false, fillColor: COLOR[p.kind], fillOpacity: 0.18, interactive: false }).addTo(map)
+      const marker = p.kind === 'hotel' || p.kind === 'airport'
+        ? L.marker(at, { icon: L.divIcon({ className: 'tpn-pin', html: glyph(p.kind), iconSize: [16, 16], iconAnchor: [8, 8] }), keyboard: false })
+        : L.circleMarker(at, { radius: big ? 5 : 3.5, color: PANEL, weight: 1.5, fillColor: COLOR[p.kind], fillOpacity: 1 })
+      const text = p.label.length > 22 ? p.label.slice(0, 20) + '…' : p.label
+      marker.bindTooltip(p.quiet ? (p.sub ? `${p.label} · ${p.sub}` : p.label) : text, {
+        permanent: !p.quiet, direction: 'auto', offset: [8, 0], opacity: 1,
+        className: `tpn-tip ${big ? 'tpn-tip-big' : p.kind === 'hotel' ? 'tpn-tip-hotel' : ''}`,
+      })
+      if (!p.quiet && p.sub) marker.bindPopup(`${p.label}<br><span class="text-muted">${p.sub}</span>`)
+      marker.addTo(map)
+    }
+
+    const bounds = L.latLngBounds(pins.map(p => [p.at.lat, p.at.lng]))
+    const fit = () => pins.length > 1
+      ? map.fitBounds(bounds, { padding: [24, 24], maxZoom })
+      : map.setView(bounds.getCenter(), Math.min(maxZoom, 12))
+    fit()
+    // The aside is laid out after mount (sticky column, breakpoints), and a fit done at
+    // zero width lands on the wrong zoom: refit when the box first gets a real size.
+    let fitted = el.clientWidth > 0
+    const ro = new ResizeObserver(() => {
+      map.invalidateSize()
+      if (!fitted && el.clientWidth > 0) { fitted = true; fit() }
+    })
+    ro.observe(el)
+    return () => { ro.disconnect(); map.remove() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, height, maxZoom])
+
   return (
     <>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={label}>
-        <rect width={W} height={H} fill="url(#tpn-grid)" />
-        {paths({ ...pr, arc })}
-        {pins.map((p, i) => {
-          const x = pr.X(p.at), y = pr.Y(p.at)
-          const big = p.kind === 'origin' || p.kind === 'dest'
-          const anchor = x > W * 0.66 ? 'end' : 'start'
-          const dx = anchor === 'end' ? -9 : 9
-          const dy = p.kind === 'hotel' ? 13 : p.kind === 'activity' || p.kind === 'food' ? -5 : 4
-          const text = p.label.length > 22 ? p.label.slice(0, 20) + '…' : p.label
-          return (
-            <g key={i}>
-              <title>{p.sub ? `${p.label} · ${p.sub}` : p.label}</title>
-              {big && <circle cx={x} cy={y} r="11" fill={COLOR[p.kind]} opacity="0.18" />}
-              {p.kind === 'airport'
-                ? <rect x={x - 4} y={y - 4} width="8" height="8" fill="var(--color-panel)" stroke={COLOR.airport} strokeWidth="1.5" transform={`rotate(45 ${x} ${y})`} />
-                : p.kind === 'hotel'
-                  ? <path d={`M ${x - 5} ${y + 4} v -6 l 5 -5 l 5 5 v 6 z`} fill={COLOR.hotel} stroke="var(--color-panel)" strokeWidth="1.2" />
-                  : <circle cx={x} cy={y} r={big ? 5 : 3.5} fill={COLOR[p.kind]} stroke="var(--color-panel)" strokeWidth="1.5" />}
-              {!p.quiet && (
-                <text x={x + dx} y={y + dy} fontSize={big ? 12 : 10} fontWeight={big || p.kind === 'hotel' ? 600 : 400}
-                  fill={big ? 'var(--color-ink)' : p.kind === 'hotel' ? COLOR.hotel : 'var(--color-muted)'} textAnchor={anchor}>{text}</text>
-              )}
-            </g>
-          )
-        })}
-      </svg>
+      <div ref={ref} role="img" aria-label={label} className="isolate relative rounded-lg overflow-hidden border border-line bg-panel-2" style={{ height }} />
       <div className="text-[11px] text-dim mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
         {legend.map(([k, t]) => <span key={k}><span style={{ color: COLOR[k] }}>{k === 'hotel' ? '⌂' : k === 'airport' ? '◆' : '●'}</span> {t}</span>)}
       </div>
@@ -75,10 +96,10 @@ function Sketch({ pins, W, H, minSpan, paths, legend, label }: {
 }
 
 /**
- * Dependency-free trip map. Top: the route (drive = dashed curve city to city
- * with stops; fly = arc between the nearest airports plus the hops from each
- * city). Bottom: a zoomed-in sketch of the destination with the stay and the
- * things to do, since at route scale they would all sit on one pixel.
+ * Trip map on OpenStreetMap tiles. Top: the route (drive = dashed curve city to
+ * city with stops; fly = arc between the nearest airports plus the hops from
+ * each city). Bottom: the destination zoomed in with the stay and the things to
+ * do, since at route scale they would all sit on one pixel.
  */
 export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
   const origin = plan.origin_loc, dest = plan.dest_loc
@@ -89,19 +110,28 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
 
   const routePins: Pin[] = [
     { at: origin, label: oName, kind: 'origin' },
-    ...(mode === 'drive' ? plan.stops.filter(s => s.location?.lat).map(s => ({ at: s.location, label: s.name, kind: 'stop' as const })) : []),
+    ...(mode === 'drive' ? plan.stops.filter(s => s.location?.lat).map(s => ({ at: s.location, label: s.name, kind: 'stop' as const, quiet: true })) : []),
     ...(flying ? [
       { at: plan.origin_airport!, label: plan.origin_airport!.code, kind: 'airport' as const, sub: plan.origin_airport!.name },
       { at: plan.dest_airport!, label: plan.dest_airport!.code, kind: 'airport' as const, sub: plan.dest_airport!.name },
     ] : []),
     { at: dest, label: dName, kind: 'dest' },
   ]
+  const routePaths: Path[] = flying ? [
+    { pts: arc(origin, plan.origin_airport!), color: COLOR.stop, width: 1.5, dash: '2 4' },
+    { pts: arc(plan.origin_airport!, plan.dest_airport!, 0.18), color: COLOR.origin, dash: '8 6' },
+    { pts: arc(plan.dest_airport!, dest), color: COLOR.stop, width: 1.5, dash: '2 4' },
+  ] : [
+    { pts: arc(origin, dest, 0.12), color: COLOR.dest, dash: '6 6', opacity: 0.85 },
+  ]
+
   const localPins: Pin[] = [
     { at: dest, label: dName, kind: 'dest' },
     ...(hotel?.location?.lat ? [{ at: hotel.location, label: hotel.name, kind: 'hotel' as const, sub: `your stay · ${hotel.area ?? ''}` }] : []),
     ...plan.activities.slice(0, 5).filter(a => a.location?.lat).map(a => ({ at: a.location, label: a.name, kind: 'activity' as const })),
     ...plan.food.slice(0, 3).filter(f => f.location?.lat).map(f => ({ at: f.location, label: f.name, kind: 'food' as const, quiet: true })),
   ]
+  const localPaths: Path[] = hotel?.location?.lat ? [{ pts: [hotel.location, dest], color: COLOR.hotel, width: 1, dash: '2 4', opacity: 0.6 }] : []
 
   const miles = Math.round(plan.drive.distance_miles)
   const caption = flying
@@ -110,30 +140,14 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
 
   return (
     <div className="panel p-5 overflow-hidden grid gap-4">
-      <svg width="0" height="0" className="absolute" aria-hidden>
-        <defs>
-          <pattern id="tpn-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="var(--color-line)" strokeWidth="0.6" />
-          </pattern>
-        </defs>
-      </svg>
       <div>
         <div className="flex items-baseline justify-between">
           <h3 className="text-[19px]">Route</h3>
           <div className="text-[12px] text-muted shrink-0">{caption}</div>
         </div>
         <div className="mt-2">
-          <Sketch pins={routePins} W={720} H={260} minSpan={0.5} label={`Route from ${oName} to ${dName}`}
-            legend={flying ? [['origin', 'origin'], ['airport', 'airport'], ['dest', 'destination']] : [['origin', 'origin'], ...(mode === 'drive' && plan.stops.length > 0 ? [['stop', 'stop'] as [Kind, string]] : []), ['dest', 'destination']]}
-            paths={(pr: Proj) => flying ? (
-              <>
-                <path d={pr.arc(origin, plan.origin_airport!, 0)} stroke="var(--color-muted)" strokeWidth="1.5" strokeDasharray="2 3" fill="none" />
-                <path d={pr.arc(plan.origin_airport!, plan.dest_airport!, 0.18)} stroke="var(--color-cyan)" strokeWidth="2" strokeDasharray="8 5" fill="none" opacity="0.9" />
-                <path d={pr.arc(plan.dest_airport!, dest, 0)} stroke="var(--color-muted)" strokeWidth="1.5" strokeDasharray="2 3" fill="none" />
-              </>
-            ) : (
-              <path d={pr.arc(origin, dest)} stroke="var(--color-accent)" strokeWidth="2" strokeDasharray="6 5" fill="none" opacity="0.85" />
-            )} />
+          <TileMap pins={routePins} paths={routePaths} height={240} maxZoom={9} label={`Route from ${oName} to ${dName}`}
+            legend={flying ? [['origin', 'origin'], ['airport', 'airport'], ['dest', 'destination']] : [['origin', 'origin'], ...(mode === 'drive' && plan.stops.length > 0 ? [['stop', 'stop'] as [Kind, string]] : []), ['dest', 'destination']]} />
         </div>
       </div>
       {localPins.length > 1 && (
@@ -143,11 +157,8 @@ export default function RouteMap({ plan, mode }: { plan: Plan; mode: string }) {
             {hotel?.distance_km > 0 && <div className="text-[12px] text-muted shrink-0">stay {hotel.distance_km.toFixed(1)} km from center</div>}
           </div>
           <div className="mt-2">
-            <Sketch pins={localPins} W={720} H={320} minSpan={0.045} label={`Around ${dName}: your stay and things to do`}
-              legend={[['dest', 'center'], ['hotel', 'your stay'], ['activity', 'thing to do'], ['food', 'eat']]}
-              paths={(pr: Proj) => hotel?.location?.lat ? (
-                <path d={pr.arc(hotel.location, dest, 0)} stroke="var(--color-rose)" strokeWidth="1" strokeDasharray="2 3" fill="none" opacity="0.6" />
-              ) : null} />
+            <TileMap pins={localPins} paths={localPaths} height={300} maxZoom={14} label={`Around ${dName}: your stay and things to do`}
+              legend={[['dest', 'center'], ['hotel', 'your stay'], ['activity', 'thing to do'], ['food', 'eat']]} />
           </div>
         </div>
       )}
