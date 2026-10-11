@@ -301,17 +301,32 @@ func (g *Geo) Route(ctx context.Context, from, to LatLng) (miles float64, minute
 		}
 	}
 	// OSRM's public demo server: real road routing, no key, light use only.
+	// The simplified geometry comes along so Waypoints can place road stops
+	// on the actual highway rather than on a straight line.
 	if !Offline {
-		u := fmt.Sprintf("https://router.project-osrm.org/route/v1/driving/%f,%f;%f,%f?overview=false", from.Lng, from.Lat, to.Lng, to.Lat)
+		u := fmt.Sprintf("https://router.project-osrm.org/route/v1/driving/%f,%f;%f,%f?overview=simplified&geometries=geojson", from.Lng, from.Lat, to.Lng, to.Lat)
 		var osrm struct {
 			Code   string `json:"code"`
 			Routes []struct {
 				Distance float64 `json:"distance"`
 				Duration float64 `json:"duration"`
+				Geometry struct {
+					Coordinates [][]float64 `json:"coordinates"` // [lng, lat]
+				} `json:"geometry"`
 			} `json:"routes"`
 		}
 		if err := g.getJSON(ctx, u, &osrm); err == nil && osrm.Code == "Ok" && len(osrm.Routes) > 0 && osrm.Routes[0].Distance > 0 {
-			return osrm.Routes[0].Distance / 1609.34, int(osrm.Routes[0].Duration / 60), "osrm"
+			r := osrm.Routes[0]
+			line := make([]LatLng, 0, len(r.Geometry.Coordinates))
+			for _, c := range r.Geometry.Coordinates {
+				if len(c) == 2 {
+					line = append(line, LatLng{Lat: c[1], Lng: c[0]})
+				}
+			}
+			routeMu.Lock()
+			routeLines[routeKey(from, to)] = line
+			routeMu.Unlock()
+			return r.Distance / 1609.34, int(r.Duration / 60), "osrm"
 		}
 	}
 	// Great-circle distance with a road-winding factor; 62 mph average.
@@ -330,6 +345,61 @@ func haversineMiles(a, b LatLng) float64 {
 
 // HaversineMiles is the exported straight-line distance between two points.
 func HaversineMiles(a, b LatLng) float64 { return haversineMiles(a, b) }
+
+var (
+	routeMu    sync.Mutex
+	routeLines = map[string][]LatLng{} // road geometry from the last Route call for a pair
+)
+
+func routeKey(a, b LatLng) string {
+	return fmt.Sprintf("%.3f,%.3f>%.3f,%.3f", a.Lat, a.Lng, b.Lat, b.Lng)
+}
+
+// Waypoints returns n points spread evenly along the driven road between a
+// and b (exclusive of the ends), for looking up stops on the way. It uses the
+// geometry the last Route call fetched; without one it falls back to a
+// straight line.
+func (g *Geo) Waypoints(a, b LatLng, n int) []LatLng {
+	routeMu.Lock()
+	line := routeLines[routeKey(a, b)]
+	routeMu.Unlock()
+	if pts := PointsAlong(line, n); len(pts) == n {
+		return pts
+	}
+	return Interpolate(a, b, n)
+}
+
+// PointsAlong picks n points at equal distance fractions along a polyline
+// (exclusive of its ends). Fewer than two vertices → nil.
+func PointsAlong(line []LatLng, n int) []LatLng {
+	if len(line) < 2 || n < 1 {
+		return nil
+	}
+	cum := make([]float64, len(line))
+	for i := 1; i < len(line); i++ {
+		cum[i] = cum[i-1] + haversineMiles(line[i-1], line[i])
+	}
+	total := cum[len(cum)-1]
+	if total == 0 {
+		return nil
+	}
+	out := make([]LatLng, 0, n)
+	seg := 1
+	for k := 1; k <= n; k++ {
+		target := total * float64(k) / float64(n+1)
+		for seg < len(cum)-1 && cum[seg] < target {
+			seg++
+		}
+		p, q := line[seg-1], line[seg]
+		span := cum[seg] - cum[seg-1]
+		t := 0.0
+		if span > 0 {
+			t = (target - cum[seg-1]) / span
+		}
+		out = append(out, LatLng{Lat: p.Lat + (q.Lat-p.Lat)*t, Lng: p.Lng + (q.Lng-p.Lng)*t})
+	}
+	return out
+}
 
 // Interpolate returns n evenly spaced points between a and b (exclusive),
 // used to look up stops along a drive.

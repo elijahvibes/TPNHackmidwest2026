@@ -84,6 +84,9 @@ func Curate(ctx context.Context, c Chat, trip Trip, kind string, cands []travel.
 		if p.Rating > 0 {
 			fmt.Fprintf(&list, " ★%.1f", p.Rating)
 		}
+		if p.Popularity > 0 {
+			fmt.Fprintf(&list, " [%.0f Wikipedia readers/day]", p.Popularity)
+		}
 		if d := milesBetween(trip.Center, p.Location); d > 0 {
 			fmt.Fprintf(&list, " %.1f mi", d)
 		}
@@ -94,7 +97,7 @@ func Curate(ctx context.Context, c Chat, trip Trip, kind string, cands []travel.
 	}
 	system := `You are the Curator agent for a trip planner. You receive a numbered list of REAL places from a map provider and must choose the ones worth a traveler's time. Reply with JSON only:
 {"keep":[{"index":int,"note":string,"price_usd":number}],"dropped":[{"index":int,"reason":string}]}
-Rules: keep at most the requested number, best first. DROP anything that is not a genuine destination of the requested kind (gas stations, parking lots, offices, schools, cemeteries, generic chain stores, unnamed or administrative entries), near-duplicates and multiple branches of one chain, places that clash with the traveler's interests or group, and places unrealistic to reach with their local transport. Each note is at most 12 words and uses only facts shown in the list; if there are no facts, use an empty string; notes never mention prices. price_usd is your best estimate of the typical per-person cost (adult admission, or an average meal with drink), 0 for free places like parks; when the place name tells you nothing, estimate from its category. Never invent a place or an index that is not listed.`
+Rules: keep at most the requested number, best first. The traveler's interests come first: cover each interest with its best places. "Wikipedia readers/day" is how well known a place is; among places that serve the same interest prefer the well-read ones over obscure ones, and a famous place slightly outside the ideal range over a nondescript one nearby; a place with no reader count is simply unknown, not bad. Skip anything seasonal that cannot be confirmed for the dates (a team's game, a summer-only park). DROP anything that is not a genuine destination of the requested kind (gas stations, parking lots, offices, schools, cemeteries, generic chain stores, unnamed or administrative entries), near-duplicates and multiple branches of one chain, places that clash with the traveler's interests or group, and places unrealistic to reach with their local transport. Each note is at most 12 words and uses only facts shown in the list; if there are no facts, use an empty string; notes never mention prices. price_usd is your best estimate of the typical per-person cost (adult admission, or an average meal with drink), 0 for free places like parks; when the place name tells you nothing, estimate from its category. Never invent a place or an index that is not listed.`
 	tripJSON, _ := json.Marshal(trip)
 	user := fmt.Sprintf("Trip: %s\nKind: %s\nKeep the best %d.\n\n%s", tripJSON, kind, want, list.String())
 
@@ -293,14 +296,17 @@ func Critique(ctx context.Context, c Chat, trip Trip, itinerary any) Report {
 		rep.Status, rep.Summary = "skipped", "no model configured"
 		return rep
 	}
-	system := `You are the Reviewer agent for a trip planner. Read the itinerary as a skeptical, experienced traveler and list concrete problems only. Reply with JSON only: {"verdict":"good|fixable|poor","issues":[string]} with at most 5 issues, each one sentence naming the day and the item. Look for: outdoor plans on rainy days, impossible timing (an activity after the trip home, two far-apart places an hour apart), repeated places, a day with nothing to do, safety advice ignored when safety_level is "elevated", and anything that contradicts the weather or the traveler's interests. Do not comment on prices. If nothing is wrong, return an empty issues list.`
+	system := `You are the Reviewer agent for a trip planner. Reply with JSON only: {"verdict":"good|fixable|poor","issues":[string]}.
+An issue is a CONTRADICTION between two facts in the data you were given, stated in one sentence that names the day, the item and the data it contradicts. Examples: an "outdoor" item on a trip day whose forecast_for_trip_days entry shows 50%+ rain; the same place scheduled twice; a day with no activity at all; an item timed after the trip-home leg on the last day; a theme that contradicts its items.
+Never report: anything the data does not show (traffic, geography you assume, what a place "might" be like), advice you wish the text included (gear, buffers, safety reminders), opening hours, prices, transit, or the forecast for dates that are not trip days. Trust the "setting" field over your own knowledge. Arrival-day timing, dinner hours and last-day lead times are enforced by the system.
+At most 3 issues. With no contradictions the verdict is "good" and issues is an empty list; "poor" only when a day is unusable.`
 	tripJSON, _ := json.Marshal(trip)
 	itinJSON, _ := json.Marshal(itinerary)
 	var out struct {
 		Verdict string   `json:"verdict"`
 		Issues  []string `json:"issues"`
 	}
-	cctx, cancel := context.WithTimeout(ctx, callTimeout)
+	cctx, cancel := context.WithTimeout(ctx, callTimeout+30*time.Second) // last step; the endpoint is slowest under load
 	defer cancel()
 	if err := c.ChatJSON(cctx, system, fmt.Sprintf("Trip: %s\nItinerary: %s", tripJSON, itinJSON), &out); err != nil {
 		log.Printf("agents: reviewer: %v", err)
@@ -308,7 +314,7 @@ func Critique(ctx context.Context, c Chat, trip Trip, itinerary any) Report {
 		return rep
 	}
 	rep.Status = "ok"
-	rep.Notes = clip(out.Issues, 5)
+	rep.Notes = clip(out.Issues, 3)
 	if out.Verdict == "" {
 		out.Verdict = "good"
 	}
@@ -321,6 +327,11 @@ func Critique(ctx context.Context, c Chat, trip Trip, itinerary any) Report {
 // matchPlace finds the real place an itinerary title refers to. Models write
 // "Dinner at Joe's Diner" or "Joe's Diner (outdoor seating)", so a title
 // matches when it contains the place name or the name contains the title.
+// MatchPlace finds the real place an itinerary title refers to (exported for the planner).
+func MatchPlace(title string, places []travel.Place) (travel.Place, bool) {
+	return matchPlace(title, places)
+}
+
 func matchPlace(title string, places []travel.Place) (travel.Place, bool) {
 	t := norm(title)
 	best, bestLen := travel.Place{}, 0

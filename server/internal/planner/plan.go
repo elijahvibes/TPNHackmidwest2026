@@ -117,9 +117,22 @@ func (p *Planner) Plan(ctx context.Context, req Request) (*Plan, error) {
 	go func() {
 		defer wg.Done()
 		activities = p.activitiesFor(ctx, dest, req.Interests, req.ActivityRadiusMiles)
-		food = p.Places.Explore(ctx, dest, "food", 12, req.ActivityRadiusMiles)
+		// Wikivoyage's curated listings (with published prices) join the
+		// provider candidates, and Wikipedia readership ranks them all, so the
+		// Curator sees Red Rocks ahead of a pocket park and can prefer it.
+		activities = travel.MergeNotable(activities, p.Wiki.Listings(ctx, g.destPlace.Name, dest, req.ActivityRadiusMiles, "attraction", 15))
+		if views := p.Wiki.Popularity(ctx, placeNames(activities)); len(views) > 0 {
+			for i := range activities {
+				if v := views[activities[i].Name]; activities[i].Popularity == 0 && v > 0 {
+					activities[i].Popularity = v
+				}
+			}
+			sort.SliceStable(activities, func(i, j int) bool { return activities[i].Popularity > activities[j].Popularity })
+		}
+		food = travel.MergeNotable(p.Places.Explore(ctx, dest, "food", 12, req.ActivityRadiusMiles),
+			p.Wiki.Listings(ctx, g.destPlace.Name, dest, req.ActivityRadiusMiles, "food", 8))
 		seen := map[string]bool{}
-		for _, pt := range travel.Interpolate(origin, dest, 2) {
+		for _, pt := range p.Geo.Waypoints(origin, dest, 2) { // on the driven road, not a straight line
 			for _, s := range p.Places.Nearby(ctx, pt, "rest_stop", 4) {
 				if !seen[s.Name] {
 					seen[s.Name] = true
@@ -377,6 +390,14 @@ func (p *Planner) assemble(g gathered, activities, food, stops []travel.Place) *
 		plan.Sources["place_prices"] = "estimate"
 	}
 	return plan
+}
+
+func placeNames(ps []travel.Place) []string {
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, p.Name)
+	}
+	return out
 }
 
 func anyEstimated(lists ...[]travel.Place) bool {

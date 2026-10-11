@@ -89,6 +89,7 @@ type Plan struct {
 	Weather             travel.Weather       `json:"weather"`
 	Safety              travel.Safety        `json:"safety"`
 	AIGenerated         bool                 `json:"ai_generated"`
+	scheduleNotes       []string             // what normalizeSchedule changed in the AI's draft, for the audit report
 	Sources             map[string]string    `json:"sources"`
 	GeneratedAt         time.Time            `json:"generated_at"`
 	Travelers           int                  `json:"travelers"`
@@ -119,7 +120,8 @@ type Planner struct {
 	Fuel    *travel.Fuel
 	SerpAPI TravelSearch
 	Places  *travel.Places
-	Weather *travel.NWS // nil = mock forecast (tests)
+	Weather *travel.NWS  // nil = mock forecast (tests)
+	Wiki    *travel.Wiki // nil = no popularity signal (tests)
 }
 
 // review runs the Reviewer agent over the written itinerary: a deterministic
@@ -167,8 +169,56 @@ func (p *Planner) review(ctx context.Context, trip agents.Trip, plan *Plan) []ag
 			}
 		}
 	}
-	audit.Summary = fmt.Sprintf("checked %d lines against real data: %d removed, %d costs corrected", len(items), len(drop), len(clamp))
-	critique := agents.Critique(ctx, p.AI, trip, map[string]any{"summary": plan.Summary, "days": plan.Days, "weather": plan.Weather.Days})
+	audit.Notes = append(audit.Notes, plan.scheduleNotes...)
+	audit.Summary = fmt.Sprintf("checked %d lines against real data: %d removed, %d costs corrected, %d times fixed", len(items), len(drop), len(clamp), len(plan.scheduleNotes))
+	// The Reviewer only sees forecast entries for the trip's own dates; the
+	// 7-day outlook for other dates would just mislead it.
+	var tripWeather []travel.DayWeather
+	for _, d := range plan.Days {
+		if w := weatherOn(plan.Weather, d.Date); w != nil {
+			dw := *w
+			// NWS can label a day "Sunny" with a 57% chance of showers later;
+			// the number is what the plan acts on, so the label follows it.
+			if dw.PrecipPct >= rainyPct && !strings.Contains(strings.ToLower(dw.Short), "rain") && !strings.Contains(strings.ToLower(dw.Short), "shower") {
+				dw.Short = fmt.Sprintf("Showers likely (%d%%), %s early", dw.PrecipPct, strings.ToLower(dw.Short))
+			}
+			tripWeather = append(tripWeather, dw)
+		}
+	}
+	// A compact view (no details or costs) keeps the Reviewer's call short on
+	// a shared, slow endpoint.
+	type line struct {
+		Time, Title, Category string
+		Setting               string `json:"setting,omitempty"` // indoor | outdoor, from the place data
+	}
+	type dayView struct {
+		Day   int
+		Date  string
+		Theme string
+		Items []line
+	}
+	setting := func(title string) string {
+		if p, ok := agents.MatchPlace(title, known.Places); ok {
+			if isOutdoor(p) {
+				return "outdoor"
+			}
+			return "indoor"
+		}
+		return ""
+	}
+	compact := make([]dayView, 0, len(plan.Days))
+	for _, d := range plan.Days {
+		dv := dayView{Day: d.Day, Date: d.Date, Theme: d.Theme}
+		for _, it := range d.Items {
+			l := line{Time: it.Time, Title: it.Title, Category: it.Category}
+			if it.Category == "activity" {
+				l.Setting = setting(it.Title)
+			}
+			dv.Items = append(dv.Items, l)
+		}
+		compact = append(compact, dv)
+	}
+	critique := agents.Critique(ctx, p.AI, trip, map[string]any{"summary": plan.Summary, "days": compact, "forecast_for_trip_days": tripWeather})
 	return []agents.Report{audit, critique}
 }
 
@@ -486,6 +536,7 @@ func (p *Planner) narrate(ctx context.Context, req Request, plan *Plan, start ti
 			return ta < tb
 		})
 	}
+	plan.scheduleNotes = append(plan.scheduleNotes, normalizeSchedule(plan, days)...)
 	days = sanitizeDays(days, start, plan.Nights+1)
 	if len(days) == 0 {
 		return fmt.Errorf("ai returned empty plan")
@@ -556,7 +607,7 @@ func (p *Planner) outlineDays(ctx context.Context, req Request, plan *Plan, star
 	raw, _ := json.Marshal(data)
 	system := fmt.Sprintf(`You are the Writer agent of TPN, a sharp, budget-savvy travel planner, doing the outline pass. Reply with JSON only:
 {"summary": string, "days": [{"theme": string, "activities": [int], "food": [int], "stops": [int]}]}
-"days" has exactly %d entries, in order. Day 1 is the travel-out day and the last day is the travel-home day: give each at most one activity (within 3 miles of center on the last day) and no activity on day 1 when the trip is long. Middle days get TWO activities (one for the morning, one for the afternoon) whenever two unused places of DIFFERENT types exist, preferring ones near each other; prefer indoor types on days with 50%%+ rain and say so in the theme. Each activity index at most once in the whole trip. One food index per day for dinner, each at most once; skip dinner on the last day. Stops only on day 1 and only when mode is "drive", at most 2. Use only indices that exist. Themes are 3-7 words. The summary is 2-3 sentences: name the total cost and why this mode is the best value, note the budget fit, and when safety_level is "elevated" include one concrete safety tip; use research for one specific, useful observation. Never invent prices or places.`, n)
+"days" has exactly %d entries, in order. Day 1 is the travel-out day and the last day is the travel-home day: give each at most one activity (within 3 miles of center on the last day) and no activity on day 1 when the trip is long. Middle days get TWO activities (one for the morning, one for the afternoon) whenever two unused places of DIFFERENT types exist, preferring ones near each other; vary types across days too (not a small park every day; pick the most distinctive places first); prefer indoor types on days with 50%%+ rain and say so in the theme. Each activity index at most once in the whole trip. One food index per day for dinner, each at most once; skip dinner on the last day. Stops only on day 1 and only when mode is "drive", at most 2. Use only indices that exist. Themes are 3-7 words. The summary is 2-3 sentences: name the total cost and why this mode is the best value, note the budget fit, and when safety_level is "elevated" include one concrete safety tip; use research for one specific, useful observation. Never invent prices or places.`, n)
 	var out outline
 	cctx, cancel := context.WithTimeout(ctx, 100*time.Second)
 	defer cancel()
@@ -610,6 +661,10 @@ func (p *Planner) outlineDays(ctx context.Context, req Request, plan *Plan, star
 				}
 			}
 		}
+	}
+	// Rain is handled deterministically, whatever the model did with the forecast.
+	if notes := rainAwareAssign(assign, plan, start); len(notes) > 0 {
+		plan.scheduleNotes = append(plan.scheduleNotes, notes...)
 	}
 	return assign, strings.TrimSpace(out.Summary), nil
 }
@@ -686,15 +741,29 @@ func (p *Planner) writeDay(ctx context.Context, plan *Plan, i int, date string, 
 		}
 	}
 	w := weatherOn(plan.Weather, date)
+	// Plain words beat the raw record: NWS can say "Sunny" with a 57% chance
+	// of rain (showers later), and the model should not call that a sunny day.
+	weatherText := "no forecast for this date yet; do not describe the weather"
+	if w != nil {
+		switch {
+		case w.PrecipPct >= rainyPct:
+			weatherText = fmt.Sprintf("likely rain (%d%% chance), high %d°F: call it a rainy day, plan indoors, suggest a jacket", w.PrecipPct, w.HighF)
+		case w.PrecipPct >= 30:
+			weatherText = fmt.Sprintf("%s with a %d%% chance of showers, high %d°F", w.Short, w.PrecipPct, w.HighF)
+		default:
+			weatherText = fmt.Sprintf("%s, high %d°F, low %d°F", w.Short, w.HighF, w.LowF)
+		}
+	}
 	data := map[string]any{
 		"day": i + 1, "of": n, "date": date, "theme": a.Theme, "destination": plan.DestPlace.Label,
-		"travelers": plan.Travelers, "local_transport": effectiveTransport(plan),
-		"weather": w, "safety_level": plan.Safety.Level, "safety_tip": firstOf(plan.Safety.Tips),
+		"timing_rules": dayTimingRules(plan, i, n, len(a.Stops)),
+		"travelers":    plan.Travelers, "local_transport": effectiveTransport(plan),
+		"weather": weatherText, "safety_level": plan.Safety.Level, "safety_tip": firstOf(plan.Safety.Tips),
 		"fixed_items": travelFacts, "activities": facts(a.Activities), "dinner": facts(a.Food), "stops": facts(a.Stops),
 	}
 	raw, _ := json.Marshal(data)
 	system := `You are the Writer agent of TPN, a budget-savvy travel planner, writing ONE day. Reply with JSON only: {"items":[{"time":"HH:MM","title":string,"detail":string,"cost_usd":number,"category":"transport|lodging|activity|food|stop"}]}.
-Rules: 3-7 items in clock order, realistic for the travel time involved (a 10-hour drive leaving 08:00 arrives after 18:00). Include every fixed_item as its own item copying its title, category and cost_usd exactly; write only its time and detail from its facts. Include every listed activity, dinner and stop exactly once: title is the exact name (dinner: "Dinner at <name>", category food; stops: category stop), cost_usd = group_cost_usd. Never add a place that is not listed and never invent a cost. Each detail is one concrete sentence of at most 25 words drawing on note, research_note and the weather; when safety_level is "elevated" keep evening items near the hotel and mention rideshare after 22:00. Say opening hours are unverified at most once per day. Leave gaps free rather than padding.`
+Rules: 3-7 items in clock order. Obey timing_rules exactly: they give the real arrival time and the latest time to be done before the trip home. Dinner is 17:30-20:30. Include every fixed_item as its own item copying its title, category and cost_usd exactly; write only its time and detail from its facts. Include every listed activity, dinner and stop exactly once: title is the exact name (dinner: "Dinner at <name>", category food; stops: category stop), cost_usd = group_cost_usd. Never add a place that is not listed and never invent a cost. Each detail is one concrete sentence of at most 25 words drawing on note, research_note and the weather; when safety_level is "elevated" keep evening items near the hotel and mention rideshare after 22:00. Say opening hours are unverified at most once per day. Leave gaps free rather than padding.`
 	var out dayResponse
 	cctx, cancel := context.WithTimeout(ctx, 100*time.Second)
 	defer cancel()
@@ -713,6 +782,33 @@ Rules: 3-7 items in clock order, realistic for the travel time involved (a 10-ho
 		}
 	}
 	return out.Items, nil
+}
+
+// dayTimingRules spells out the schedule physics for one day so the Writer
+// gets them right the first time; normalizeSchedule enforces them anyway.
+func dayTimingRules(plan *Plan, i, n, stops int) []string {
+	var rules []string
+	if i == 0 {
+		at := arrivalMinutes(plan, stops)
+		rules = append(rules, fmt.Sprintf("You leave home at 08:00 and arrive at the destination at %s. Nothing at the destination (check-in, activities, dinner) can start before %s.", fmtHM(at), fmtHM(at)))
+		switch {
+		case at > dinnerCutoff:
+			rules = append(rules, "Arrival is too late for dinner or an activity: only the travel legs and check-in.")
+		case at+60 > activityLast:
+			rules = append(rules, "Arrival is too late for an activity; dinner right after check-in is fine.")
+		}
+	}
+	if i == n-1 && n > 1 {
+		if plan.RecommendedMode == "fly" {
+			rules = append(rules, "This is the flight-home day: every activity must finish at least 3 hours before the flight; put the flight at 14:00 or later if there is a morning activity, and nothing after it.")
+		} else {
+			rules = append(rules, "This is the drive-home day: finish the last activity at least 45 minutes before departing, and schedule nothing after the drive home.")
+		}
+	}
+	if i > 0 && i < n-1 {
+		rules = append(rules, "A full day: first activity 09:00-11:00, second 13:00-15:30, dinner 18:00-19:30.")
+	}
+	return rules
 }
 
 func firstNonEmptyStr(s ...string) string {
@@ -874,6 +970,7 @@ func fallbackItinerary(req Request, plan *Plan, start time.Time) (string, []Day)
 	}
 	summary := fmt.Sprintf("%s to %s for %d traveler(s), %d night(s). Best value is to %s: about $%.0f priced subtotal (%s).%s%s",
 		plan.OriginPlace.Label, plan.DestPlace.Label, req.Travelers, plan.Nights, plan.RecommendedMode, plan.TotalUSD, rec.Why, fits, extra)
+	normalizeSchedule(plan, days)
 	return summary + mobilityNote(plan), days
 }
 

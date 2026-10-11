@@ -79,3 +79,23 @@ func TestStateCode(t *testing.T) {
 		t.Error("StateCode mapping broken")
 	}
 }
+
+func TestPointsAlongFollowsThePolyline(t *testing.T) {
+	// An L-shaped road: east 2 units, then north 2 units. The straight line
+	// between the ends would cut the corner; points along the road do not.
+	line := []LatLng{{Lat: 0, Lng: 0}, {Lat: 0, Lng: 2}, {Lat: 2, Lng: 2}}
+	pts := PointsAlong(line, 3)
+	if len(pts) != 3 {
+		t.Fatalf("got %d points", len(pts))
+	}
+	// 1/4 of the way: still on the eastbound leg; 3/4: on the northbound leg.
+	if pts[0].Lat != 0 || pts[0].Lng < 0.9 || pts[0].Lng > 1.1 {
+		t.Errorf("first point should be on the first leg: %+v", pts[0])
+	}
+	if pts[2].Lng != 2 || pts[2].Lat < 0.9 || pts[2].Lat > 1.1 {
+		t.Errorf("last point should be on the second leg: %+v", pts[2])
+	}
+	if PointsAlong(nil, 2) != nil || len(NewGeo("").Waypoints(line[0], line[2], 2)) != 2 {
+		t.Error("fallbacks")
+	}
+}

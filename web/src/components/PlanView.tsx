@@ -118,10 +118,11 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
           <SafetyCard s={plan.safety} />
         </aside>
       </div>
-      {[...plan.activities, ...plan.food, ...stops].some(p => p.source === 'geoapify') && (
+      {[...plan.activities, ...plan.food, ...stops].some(p => p.source === 'geoapify' || p.source === 'wikipedia' || p.popularity) && (
         <p className="text-xs text-muted">
           Powered by <a className="underline" href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a>
-          {' · '}© <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.
+          {' · '}© <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>
+          {' · '}"well known" and descriptions from <a className="underline" href="https://en.wikipedia.org/" target="_blank" rel="noreferrer">Wikipedia</a> (CC BY-SA).
           Place prices marked ~ are typical-price estimates, not provider data.
         </p>
       )}
@@ -149,6 +150,7 @@ function Explore({ plan }: { plan: Plan }) {
                   <span className="min-w-0">
                     <span className="text-ink">{p.name}</span>
                     {p.rating > 0 && <span className={`mono text-[10px] ml-1.5 ${g.color}`}>★{p.rating.toFixed(1)}</span>}
+                    {(p.popularity ?? 0) >= 100 && <span className="mono text-[10px] ml-1.5 text-cyan" title={`${p.popularity} Wikipedia readers a day`}>{(p.popularity ?? 0) >= 1000 ? 'famous' : 'well known'}</span>}
                     {p.note && <div className="text-[12px] text-dim">{p.note}</div>}
                     {mapLink && <a href={mapLink} target="_blank" rel="noopener noreferrer" className="text-cyan underline"
                       aria-label={`View map for ${p.name} (opens in a new tab)`}>View map</a>}
