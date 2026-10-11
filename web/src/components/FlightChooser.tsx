@@ -10,11 +10,11 @@ type Props = {
 function FlightDetails({ flight }: { flight: FlightQuote }) {
   return (
     <div>
-      <div className="mono font-bold">{flight.carrier}</div>
+      <div className="text-[15px] font-medium text-ink">{flight.carrier}</div>
       <div className="text-sm text-muted mt-1">
         {flight.origin} → {flight.destination} · {hrs(flight.duration_min)} · {flight.stops === 0 ? 'nonstop' : `${flight.stops} stop${flight.stops === 1 ? '' : 's'}`}
       </div>
-      {flight.departure_time && <div className="mono text-xs mt-2">{flight.departure_time} → {flight.arrival_time} <span className="text-dim">(airport local times)</span></div>}
+      {flight.departure_time && <div className="text-xs mt-2 tabular-nums">{flight.departure_time} → {flight.arrival_time} <span className="text-dim">(airport local times)</span></div>}
       {!!flight.flight_numbers?.length && <div className="text-xs text-dim mt-1">{flight.flight_numbers.join(' · ')}</div>}
     </div>
   )
@@ -36,8 +36,8 @@ function BookingLink({ seller }: { seller: BookingSeller }) {
   return (
     <div className="panel p-4 grid gap-2">
       <div className="flex flex-wrap justify-between gap-2">
-        <span className="font-bold">{seller.book_with} {seller.option_title && <span className="text-muted font-normal">· {seller.option_title}</span>}</span>
-        {seller.price > 0 && <span className="mono text-accent">{usd(seller.price)} group total</span>}
+        <span className="font-medium">{seller.book_with} {seller.option_title && <span className="text-muted font-normal">· {seller.option_title}</span>}</span>
+        {seller.price > 0 && <span className="text-ink font-medium tabular-nums">{usd(seller.price)} group total</span>}
       </div>
       <ul className="text-xs text-muted grid gap-1">
         {[...(seller.extensions ?? []), ...(seller.baggage_prices ?? [])].map((text, i) => <li key={i}>{text}</li>)}
@@ -100,16 +100,16 @@ export default function FlightChooser({ plan, onSelect, disabled = false }: Prop
   }
 
   return (
-    <section className="panel p-5 grid gap-4" aria-label="Choose your flights" aria-busy={!!busy}>
+    <section className="panel px-6 py-6 grid gap-5" aria-label="Choose your flights" aria-busy={!!busy}>
       <div>
-        <h3 className="mono text-lg font-bold">Choose your flight</h3>
+        <h3 className="text-[22px]">Choose your flight</h3>
         <p className="text-sm text-muted mt-1">Best value first: fare + $25 per outbound travel hour + $50 per connection. Choose a departure, then a return and booking provider.</p>
         <p className="text-xs text-dim mt-1">Prices are round trip per traveler. Choosing a return may change the fare. TPN prices all travelers as adults.</p>
       </div>
-      {!plan.travelers && <p className="text-amber">Re-plan this older trip to enable flight selection.</p>}
+      {!plan.travelers && <p className="text-amber text-sm">Re-plan this older trip to enable flight selection.</p>}
       <div className="flex flex-wrap items-center gap-4">
-        <label className="text-sm">Sort by
-          <select className="input mt-1" value={sort} onChange={e => setSort(e.target.value)}>
+        <label className="text-sm text-muted">Sort by
+          <select className="input mt-1 !w-auto !py-1.5" value={sort} onChange={e => setSort(e.target.value)}>
             <option value="recommended">Recommended</option><option value="price">Lowest price</option><option value="duration">Shortest flight</option>
           </select>
         </label>
@@ -118,7 +118,7 @@ export default function FlightChooser({ plan, onSelect, disabled = false }: Prop
       </div>
       <div className="grid gap-3" role="group" aria-label="Departure flight options">
         {(showAll ? choices : choices.slice(0, 5)).map(({ flight: f, index }) => (
-          <div key={index} className={`panel p-4 ${index === selectedIndex ? 'border-accent' : ''}`}>
+          <div key={index} className={`panel p-4 ${index === selectedIndex ? "border-accent/60 bg-accent-soft/40" : ""}`}>
             <div className="flex flex-wrap justify-between gap-3">
               <div>
                 <div className="flex gap-2 mb-2">
@@ -128,7 +128,7 @@ export default function FlightChooser({ plan, onSelect, disabled = false }: Prop
                 <FlightDetails flight={f} />
               </div>
               <div className="text-right">
-                <div className="mono text-xl text-accent">{usd(f.price_usd)}</div>
+                <div className="serif text-[24px] text-ink tabular-nums">{usd(f.price_usd)}</div>
                 <div className="text-xs text-muted">round trip / traveler</div>
                 <button className="btn-ghost mt-3" disabled={locked || !plan.travelers || (index === selectedIndex && plan.recommended_mode === 'fly')}
                   onClick={() => select(index)} aria-pressed={index === selectedIndex}>choose departure</button>
@@ -141,16 +141,16 @@ export default function FlightChooser({ plan, onSelect, disabled = false }: Prop
       {choices.length > 5 && <button className="btn-ghost justify-self-start" onClick={() => setShowAll(!showAll)}>{showAll ? 'show fewer' : `show all ${choices.length} departure options`}</button>}
       {selected && search && (
         <div className="border-t border-line pt-4 grid gap-3">
-          <h4 className="mono font-bold">Return flight</h4>
+          <h4 className="text-[19px] serif">Return flight</h4>
           <p className="text-sm text-muted">For your selected {selected.carrier} departure {selected.departure_time || selected.depart}.</p>
           {!selected.departure_token ? <p className="text-amber">This result has no return-selection token. Re-plan or choose another departure.</p> : (
             <button className="btn-ghost justify-self-start" onClick={loadReturns} disabled={locked}> {returns.length ? 'refresh return options' : 'find return flights'}</button>
           )}
-          {plan.selected_return && <div className="panel border-accent p-3"><span className="tag text-accent">selected return</span><FlightDetails flight={plan.selected_return} /><p className="mono mt-2">{usd(plan.selected_return.price_usd)} round trip / traveler</p></div>}
+          {plan.selected_return && <div className="panel border-accent/60 bg-accent-soft/40 p-4"><span className="tag text-accent">selected return</span><FlightDetails flight={plan.selected_return} /><p className="mt-2 text-sm tabular-nums">{usd(plan.selected_return.price_usd)} round trip / traveler</p></div>}
           {(showAllReturns ? returns : returns.slice(0, 5)).map((f, i) => (
             <div className="panel p-4 flex flex-wrap justify-between gap-3" key={i}>
               <div>{i === 0 && <span className="tag text-accent">recommended return</span>}<FlightDetails flight={f} /></div>
-              <div className="text-right"><div className="mono text-accent">{usd(f.price_usd)} / traveler</div>
+              <div className="text-right"><div className="text-ink font-medium tabular-nums">{usd(f.price_usd)} / traveler</div>
                 <button className="btn-ghost mt-2" disabled={locked || !f.booking_token} onClick={() => select(selectedIndex, f.booking_token)}>choose return</button>
                 {!f.booking_token && <p className="text-xs text-amber mt-1">Provider did not return a selectable booking token.</p>}
               </div>
@@ -174,7 +174,7 @@ export default function FlightChooser({ plan, onSelect, disabled = false }: Prop
           )}
         </div>
       )}
-      {busy && <p role="status" className="mono text-cyan text-sm">{busy}…</p>}
+      {busy && <p role="status" className="text-muted text-sm">{busy}<span className="caret" /></p>}
       {error && <p role="alert" className="text-rose text-sm">{error} Try refreshing options or re-planning if the search has expired.</p>}
     </section>
   )

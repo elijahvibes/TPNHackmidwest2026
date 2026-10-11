@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { api, type Placemark } from '../lib/api'
+import Icon from './Icon'
 
 /**
  * City / town / park autocomplete. Any place works: suggestions come from the
@@ -62,7 +63,7 @@ export default function PlaceInput({ value, pinned, onChange, onPick, placeholde
     <div ref={boxRef} className="relative">
       <input
         id={id} autoFocus={autoFocus}
-        className={`input pr-8 ${pinned ? '!border-accent/60' : ''}`}
+        className="input pr-9"
         value={value} placeholder={placeholder} required autoComplete="off"
         role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
         onChange={e => {
@@ -74,17 +75,19 @@ export default function PlaceInput({ value, pinned, onChange, onPick, placeholde
         onFocus={() => items.length && setOpen(true)}
         onKeyDown={onKey}
       />
-      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 mono text-[11px] pointer-events-none" aria-hidden>
-        {loading ? <span className="text-dim">…</span> : pinned ? <span className="text-accent" title={`pinned: ${pinned.lat.toFixed(3)}, ${pinned.lng.toFixed(3)}`}>◉</span> : <span className="text-dim">◎</span>}
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center" aria-hidden>
+        {loading ? <span className="text-dim text-xs">…</span>
+          : pinned ? <Icon name="check" size={15} className="text-accent" />
+            : <Icon name="chevron" size={15} className="text-muted" />}
       </span>
       {open && items.length > 0 && (
-        <ul id={listId} role="listbox" className="absolute z-20 mt-1 w-full panel shadow-xl shadow-black/40 overflow-hidden">
+        <ul id={listId} role="listbox" className="absolute z-20 mt-1.5 w-full panel shadow-lg shadow-ink/10 overflow-hidden py-1">
           {items.map((p, i) => (
             <li key={p.label + i} role="option" aria-selected={i === hi}
-              className={`px-3 py-2 text-sm cursor-pointer flex items-center justify-between gap-3 ${i === hi ? 'bg-panel-2 text-ink' : 'text-muted'}`}
+              className={`px-3.5 py-2 text-sm cursor-pointer flex items-center justify-between gap-3 ${i === hi ? 'bg-panel-2 text-ink' : 'text-muted'}`}
               onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); pick(p) }}>
               <span><span className="text-ink">{p.name}</span>{p.label !== p.name && <span className="text-muted">, {p.label.slice(p.name.length + 2)}</span>}</span>
-              <span className="mono text-[10px] text-dim">{p.source === 'gazetteer' ? 'popular' : p.country}</span>
+              <span className="text-[11px] text-dim">{p.source === 'gazetteer' ? 'popular' : p.country}</span>
             </li>
           ))}
         </ul>

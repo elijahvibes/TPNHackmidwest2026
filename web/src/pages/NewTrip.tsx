@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import TripForm, { type TripFormValue } from '../components/TripForm'
+import Hero from '../components/Hero'
 import { useAuth } from '../lib/auth'
 
 export default function NewTrip() {
@@ -27,15 +28,12 @@ export default function NewTrip() {
   }
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <div className="mono text-xs text-muted prompt">tpn new</div>
-        <h1 className="mono text-2xl font-bold mt-1">new trip</h1>
-        <p className="text-sm text-muted mt-1">Enter any city, town or park. TPN prices flights from the nearest airport and the drive for your car.</p>
-      </div>
-      <TripForm onSubmit={submit} busy={busy} submitLabel="save & plan" defaultOrigin={user?.home_city} />
-      {busy && <div className="mono text-sm text-cyan">saving trip and starting the planner…<span className="caret" /></div>}
-      {err && <div className="mono text-sm text-rose">error: {err}</div>}
+    <div className="grid gap-8">
+      <Hero eyebrow="Plan a trip" title="Where to next?"
+        lede="Enter any city, town or park. TPN prices flights from the nearest airport and the drive for your car, then saves the trip to your account." />
+      <TripForm onSubmit={submit} busy={busy} submitLabel="Save & plan my trip" defaultOrigin={user?.home_city} />
+      {busy && <div className="text-sm text-muted">Saving the trip and starting the planner<span className="caret" /></div>}
+      {err && <div className="text-sm text-rose">{err}</div>}
     </div>
   )
 }

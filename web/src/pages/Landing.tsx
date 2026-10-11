@@ -5,14 +5,8 @@ import { usePlanJob } from '../lib/usePlanJob'
 import TripForm, { type TripFormValue } from '../components/TripForm'
 import PlanView from '../components/PlanView'
 import PlanProgress from '../components/PlanProgress'
+import Hero from '../components/Hero'
 import { useAuth } from '../lib/auth'
-
-const PERKS = [
-  ['any city', 'type a town, a park or a lake. Flights come from its nearest airport'],
-  ['your car', 'gas priced from your MPG and this week’s pump price'],
-  ['real stays', 'hotels near the destination. Swap one and the total updates'],
-  ['drive vs fly', 'one value score weighs price against travel time'],
-]
 
 export default function Landing() {
   const { user } = useAuth()
@@ -51,43 +45,19 @@ export default function Landing() {
 
   return (
     <div className="grid gap-8">
-      <section className="pt-4 grid lg:grid-cols-[1.2fr_1fr] gap-8 items-end">
-        <div>
-          <div className="mono text-xs text-muted prompt">tpn plan --from "anywhere" --to "anywhere" --optimize value</div>
-          <h1 className="mono text-4xl sm:text-5xl font-bold mt-3 leading-tight">
-            Plan the whole trip<br /><span className="text-accent">for the least money.</span><span className="caret" />
-          </h1>
-          <p className="text-muted mt-4 max-w-xl">
-            TPN prices flights, gas for <em>your</em> car, hotels, activities and stops on the way together,
-            then ranks the options by value. An AI running on Akamai writes the day-by-day itinerary.
-          </p>
-          {!user && (
-            <div className="mt-4 flex gap-3">
-              <Link to="/register" className="btn-primary">create account</Link>
-              <Link to="/login" className="btn-ghost">login</Link>
-            </div>
-          )}
-        </div>
-        <ul className="grid grid-cols-2 gap-3">
-          {PERKS.map(([k, v]) => (
-            <li key={k} className="panel p-3">
-              <div className="mono text-xs text-accent">{k}</div>
-              <div className="text-[13px] text-muted mt-1 leading-snug">{v}</div>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Hero eyebrow="A good trip starts here" title="A plan that fits."
+        lede="The whole getaway, thoughtfully planned around your budget. Flights, gas for your car, stays and things to do, priced together and ranked by value." />
 
-      <TripForm onSubmit={run} busy={busy} submitLabel={user ? 'preview plan' : 'try it'} defaultOrigin={user?.home_city} />
+      <TripForm onSubmit={run} busy={busy} submitLabel={user ? 'Preview my trip' : 'Plan my trip'} defaultOrigin={user?.home_city} />
       <PlanProgress active={busy} events={job.events} stage={job.job?.stage} compact={!!plan} />
-      {err && <div className="mono text-sm text-rose">error: {err}</div>}
+      {err && <div className="text-sm text-rose">{err}</div>}
       {plan && (
-        <div ref={resultRef} className="grid gap-6 scroll-mt-20">
+        <div ref={resultRef} className="grid gap-6 scroll-mt-24">
           <PlanView plan={plan} meta={{ travelers: req?.travelers, budget_usd: req?.budget_usd ?? null }} refining={job.running}
             onSelectFlight={job.running ? undefined : selectFlight} disabled={busy || selecting}
             onChooseHotel={job.running ? undefined : name => setPlan(p => p ? chooseHotelLocally(p, name) : p)} />
-          {!user && <div className="panel p-4 mono text-sm text-muted">Like it? <Link to="/register" className="text-accent">create an account</Link> to save trips, swap hotels for good, and book with Jack Henry.</div>}
-          {user && <div className="panel p-4 mono text-sm text-muted">Save this as a trip from <Link to="/app/new" className="text-accent">+ new</Link>.</div>}
+          {!user && <div className="panel p-5 text-sm text-muted">Like it? <Link to="/register" className="text-accent underline underline-offset-2">Create an account</Link> to save trips, swap stays for good, and book with Jack Henry.</div>}
+          {user && <div className="panel p-5 text-sm text-muted">Save this as a trip from <Link to="/app/new" className="text-accent underline underline-offset-2">Plan a trip</Link>.</div>}
         </div>
       )}
     </div>
