@@ -11,17 +11,3 @@ export default function DataWarning({ details }: { details: string[] }) {
   )
 }
 
-/** Honest estimates that are part of the total: shown as a note, not an alarm. */
-export function EstimatesNote({ details }: { details: string[] }) {
-  if (details.length === 0) return null
-  return (
-    <details className="rounded-xl border border-amber/40 bg-amber/5 px-5 py-3.5 text-sm text-muted print:hidden">
-      <summary className="text-[11px] font-semibold uppercase tracking-[0.1em] text-amber cursor-pointer">
-        Estimates in this total · {details.length}
-      </summary>
-      <ul className="mt-2 list-disc pl-5 grid gap-1">
-        {details.map(detail => <li key={detail}>{detail}</li>)}
-      </ul>
-    </details>
-  )
-}

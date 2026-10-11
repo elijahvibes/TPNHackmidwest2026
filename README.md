@@ -85,20 +85,11 @@ Open http://localhost:5173. Vite proxies `/api` to the Go server on :8080.
 
 ## Mock and non-live data warnings
 
-Every displayed plan (preview, saved trip, or shared trip) shows a prominent red
-warning whenever its source tags or individual results indicate mock data,
-fallbacks, or estimates. The warning names the affected categories, including
-mixed live/mock attractions, restaurants, and rest stops. Static safety data,
-Google Places price-level cost estimates, and rule-based itineraries are identified
-separately rather than presented as live API results. Existing fallbacks remain enabled.
-
-Alongside the warning, a green "Real provider data used in this plan" section
-identifies actual flight/hotel results, Google Places names/locations/ratings,
-EIA gas prices, Mapbox directions, available NWS forecast days, and AI narration.
-Mixed live/mock categories show real-result counts as well as mock warnings.
-Empty results and static safety data are not labeled live. Provider provenance is
-recorded at plan generation; saved results are not newly checked, and Google
-Places costs remain estimates rather than real menu or admission prices.
+Plan pages no longer show the red mock-data warning, the estimates note, or the
+"Real provider data" section above the plan. Provenance is still recorded per plan:
+the plan header has a "live data sources" toggle that lists each source tag, and
+place prices marked ~ are typical-price estimates rather than provider data.
+Existing fallbacks remain enabled.
 
 Payment screens also warn about configured mock mode and persisted `JH-MOCK-`
 receipts. Mock settlement does not move money or reserve travel.

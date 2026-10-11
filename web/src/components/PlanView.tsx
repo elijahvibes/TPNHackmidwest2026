@@ -6,11 +6,10 @@ import CostBreakdown from './CostBreakdown'
 import RouteMap from './RouteMap'
 import { SafetyCard, WeatherStrip } from './WeatherSafety'
 import FlightChooser from './FlightChooser'
-import DataWarning, { EstimatesNote } from './DataWarning'
 import { AgentsCard, ResearchCard } from './AgentsPanel'
 import Icon from './Icon'
 import { PlacePicture } from './TripGlance'
-import { planDataWarnings, planEstimates, planRealData } from '../lib/dataWarnings'
+import { planEstimates } from '../lib/dataWarnings'
 import { placeMapLink } from '../lib/placeLinks'
 import { destinationTransport, roadStops } from '../lib/transport'
 
@@ -28,7 +27,6 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
   /** a draft: real prices are final, the AI agents are still working on places and the itinerary */
   refining?: boolean
 }) {
-  const realData = planRealData(plan)
   const rec = plan.options.find(o => o.mode === plan.recommended_mode) ?? plan.options[0]
   const first = plan.days[0]?.date, last = plan.days[plan.days.length - 1]?.date
   const budget = meta?.budget_usd ?? undefined
@@ -38,26 +36,10 @@ export default function PlanView({ plan, meta, actions, onChooseHotel, onReplan,
   const stops = roadStops(plan)
   const unknownCosts = [...plan.activities, ...plan.food, ...stops].some(p => p.price_unknown)
   const estimates = planEstimates(plan)
-  // While the AI is still working, "rule-based itinerary" is a transient state, not a warning.
-  const warnings = planDataWarnings(plan).filter(w => !(refining && w.startsWith('Itinerary:')))
   const destName = (plan.dest_place?.name ?? plan.title.split('→')[1] ?? '').trim()
 
   return (
     <div className="grid gap-6">
-      <DataWarning details={warnings} />
-      <EstimatesNote details={estimates} />
-      <section aria-label="Real provider data" className="rounded-xl border-2 border-accent/60 bg-accent-soft/50 p-5 print:hidden">
-        <h2 className="text-[20px] text-accent">Real provider data in this plan</h2>
-        {realData.length > 0 ? (
-          <ul className="mt-3 list-disc pl-5 grid gap-1 text-sm">
-            {realData.map(detail => <li key={detail}>{detail}</li>)}
-          </ul>
-        ) : <p className="mt-2 text-muted">No real provider results are identified in this plan.</p>}
-        <p className="mt-3 text-xs text-muted">
-          This list comes from the sources recorded when the plan was generated. TPN did not recheck
-          availability, so saved results may be out of date, and search prices are not booking quotes.
-        </p>
-      </section>
       <header className="panel px-6 sm:px-8 py-7 print:border-0 print:p-0">
         <div className="eyebrow">Your plan</div>
         <h2 className="text-[34px] sm:text-[40px] leading-tight mt-1">{destName ? `${destName} Trip` : plan.title}</h2>
